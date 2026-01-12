@@ -16,6 +16,7 @@ import ViewModal from "@/features/transactions/components/modals/ViewModal";
 import { Button } from "@/components/ui/button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 
+// TODO: Add banner
 export default function TransactionsPage() {
   const [viewData, setViewData] = useState<Transaction | null>(null);
 

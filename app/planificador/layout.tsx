@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 export const metadata: Metadata = {
-  title: "Finance Dashboard",
-  description: "Track your incomes and expenses",
+  title: "Planificador de pagos | Savvi",
+  description: "Organiza tus obligaciones y registra pagos",
 };
 
-export default function RootLayout({
+export default function PlanificadorLayout({
   children,
 }: {
   children: React.ReactNode;

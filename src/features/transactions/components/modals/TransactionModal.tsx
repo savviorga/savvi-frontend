@@ -66,6 +66,26 @@ export default function TransactionModal({
     // setFiles(preloadedFiles);
   }, [editData, open]);
 
+  // Categorías filtradas por tipo: ingreso → solo categorías tipo ingreso, egreso → solo tipo egreso, transferencia → todas
+  const filteredCategories = React.useMemo(() => {
+    if (!form.type || form.type === "transferencia") return categories;
+    return categories.filter((cat) => (cat.type ?? "egreso") === form.type);
+  }, [categories, form.type]);
+
+  // Al cambiar el tipo, limpiar categoría si ya no está en la lista filtrada
+  const handleTypeChange = (v: string) => {
+    setForm((f) => {
+      const next = { ...f, type: v };
+      if (v === "ingreso" || v === "egreso") {
+        const stillValid = categories.some(
+          (c) => (c.type ?? "egreso") === v && (f.category === c.id || f.category === c.name)
+        );
+        if (!stillValid) next.category = "";
+      }
+      return next;
+    });
+  };
+
   if (!open) return null;
 
   return (
@@ -106,7 +126,7 @@ export default function TransactionModal({
               {
                 ...form,
                 amount: Number(form.amount),
-                description: form.description || null,
+                description: form.description || undefined,
                 files: files,
               },
               editData?.id
@@ -132,12 +152,12 @@ export default function TransactionModal({
               <SavvySelect
                 label="Tipo"
                 value={form.type}
-                onChange={(v) => setForm((f) => ({ ...f, type: v }))}
+                onChange={handleTypeChange}
                 placeholder="Selecciona un tipo"
                 options={[
                   { label: "Ingreso", value: "ingreso" },
                   { label: "Egreso", value: "egreso" },
-                  { label: "Transacción", value: "transaccion" },
+                  { label: "Transferencia", value: "transferencia" },
                 ]}
               />
             </div>
@@ -161,8 +181,14 @@ export default function TransactionModal({
                 label="Categoría"
                 value={form.category}
                 onChange={(v) => setForm((f) => ({ ...f, category: v }))}
-                placeholder="Selecciona una categoría"
-                options={categories.map((cat) => ({
+                placeholder={
+                  form.type
+                    ? form.type === "transferencia"
+                      ? "Selecciona una categoría"
+                      : `Solo categorías de ${form.type === "ingreso" ? "ingresos" : "gastos"}`
+                    : "Primero elige el tipo"
+                }
+                options={filteredCategories.map((cat) => ({
                   label: cat.name,
                   value: cat.name,
                 }))}

@@ -1,11 +1,29 @@
+import { Category } from "../types/category.type";
+import { CreateCategoryDto } from "../dto/create-category.dto";
+import { ApiError } from "@/types/api-error.type";
+
 const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/categories`;
 
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const error: ApiError = await res.json();
+    throw error;
+  }
+  return res.json();
+}
+
 export const CategoryService = {
-  
-  getAll: async () => {
+  getAll: async (): Promise<Category[]> => {
     const res = await fetch(API_BASE);
-    if (!res.ok) throw new Error();
-    return res.json();
+    return handleResponse<Category[]>(res);
   },
 
+  create: async (payload: CreateCategoryDto): Promise<Category> => {
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<Category>(res);
+  },
 };

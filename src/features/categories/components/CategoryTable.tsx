@@ -23,6 +23,24 @@ export default function CategoryTable({
       render: (category) => <p>{category.name}</p>,
     },
     {
+      key: "type",
+      header: "Tipo",
+      render: (category) => {
+        const type = category.type ?? "egreso";
+        return (
+          <span
+            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              type === "ingreso"
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-rose-100 text-rose-800"
+            }`}
+          >
+            {type === "ingreso" ? "Ingresos" : "Gastos"}
+          </span>
+        );
+      },
+    },
+    {
       key: "description",
       header: "Descripción",
       render: (category) => (

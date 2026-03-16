@@ -26,7 +26,7 @@ export default function Home() {
           </p>
 
           {/* CTAs */}
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row flex-wrap">
             <Link
               href="/transactions"
               className="
@@ -38,6 +38,31 @@ export default function Home() {
       "
             >
               Empezar ahora
+            </Link>
+
+            <Link
+              href="/register"
+              className="
+        inline-flex items-center justify-center rounded-xl
+        bg-indigo-500 px-6 py-3 text-sm font-semibold text-white
+        shadow-md transition hover:bg-indigo-600 active:scale-[0.98]
+      "
+            >
+              Registrarse
+            </Link>
+
+            <Link
+              href="/login"
+              className="
+        inline-flex items-center justify-center rounded-xl
+        border border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-900
+        shadow-sm transition
+        hover:bg-gray-50 hover:shadow
+        active:scale-[0.98]
+        dark:border-gray-700 dark:bg-gray-900 dark:text-white
+      "
+            >
+              Iniciar sesión
             </Link>
 
             <Link

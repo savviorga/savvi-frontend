@@ -1,16 +1,23 @@
 "use client";
 
-import { useCategories } from '@/features/categories/hooks/useCategories';
+import { useState } from "react";
+import { useCategories } from "@/features/categories/hooks/useCategories";
 import CategoryTable from "@/features/categories/components/CategoryTable";
-import SavvyBanner from '@/components/Banner/SavvyBanner';
-import SavvyBannerLight from '@/components/Banner/SavvyBannerLight';
+import CreateCategory from "@/features/categories/components/CreateCategory";
+import SavvyBanner from "@/components/Banner/SavvyBanner";
+import { Button } from "@/components/ui/button";
+import { CreateCategoryDto } from "@/features/categories/dto/create-category.dto";
 
-export default function TransactionsPage() {
-  const {
-    categories,
-    loading: categoriesLoading,
-    reload: reloadCategories,
-  } = useCategories();
+export default function CategoriesPage() {
+  const { categories, loading, create } = useCategories();
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const handleSubmit = async (data: CreateCategoryDto) => {
+    const success = await create(data);
+    if (success) setModalOpen(false);
+  };
+
+  const handleClose = () => setModalOpen(false);
 
   return (
     <>
@@ -19,9 +26,23 @@ export default function TransactionsPage() {
         subtitle="Gestiona las categorías de tus transacciones para un mejor control financiero."
       />
 
-      <CategoryTable
-        categories={categories}
-        loading={categoriesLoading}
+      <div className="flex justify-end mb-4">
+        <Button
+          onClick={() => setModalOpen(true)}
+          variant="default"
+          className="rounded-xl"
+        >
+          + Crear categoría
+        </Button>
+      </div>
+
+      <CategoryTable categories={categories} loading={loading} />
+
+      <CreateCategory
+        open={modalOpen}
+        onClose={handleClose}
+        onSubmit={handleSubmit}
+        loading={loading}
       />
     </>
   );

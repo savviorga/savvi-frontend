@@ -7,5 +7,6 @@ export interface Category {
   description?: string;
   icon?: string;
   color?: string;
+  budgetLimit?: number;
   isActive: boolean;
 }

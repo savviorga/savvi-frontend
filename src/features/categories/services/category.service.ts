@@ -26,4 +26,13 @@ export const CategoryService = {
     });
     return handleResponse<Category>(res);
   },
+
+  updateBudget: async (id: string, budgetLimit: number): Promise<Category> => {
+    const res = await fetch(`${API_BASE}/${id}/budget`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ budgetLimit }),
+    });
+    return handleResponse<Category>(res);
+  },
 };

@@ -4,12 +4,13 @@ import { useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
-import { Account } from "../types/account.type";
+import { Account, CreateAccountDto } from "../types/account.type";
+import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 
 interface CreateAccountProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (payload: { name: string; description: string }) => void;
+  onSubmit: (payload: CreateAccountDto) => void;
   editData?: Account | null;
   loading?: boolean;
 }
@@ -18,6 +19,7 @@ function getInitialForm(editData?: Account | null) {
   return {
     name: editData?.name ?? "",
     description: editData?.description ?? "",
+    initialBalance: undefined as number | undefined,
   };
 }
 
@@ -78,6 +80,18 @@ export default function CreateAccount({
               className="mt-1 block w-full rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white"
               placeholder="Nombre de la cuenta"
               
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Saldo inicial (COP)
+            </label>
+            <CurrencyField
+              value={form.initialBalance ?? null}
+              onChange={(value) =>
+                setForm((f: any) => ({ ...f, initialBalance: value ?? undefined }))
+              }
             />
           </div>
 

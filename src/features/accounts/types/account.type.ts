@@ -5,9 +5,11 @@ export interface Account {
   color: string;
   description: string;
   isActive: boolean;
+  balance?: number;
 }
 
 export interface CreateAccountDto {
   name: string;
   description: string;
+  initialBalance?: number;
 }

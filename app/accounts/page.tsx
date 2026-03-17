@@ -6,7 +6,7 @@ import AccountTable from "@/features/accounts/components/AccountTable";
 import CreateAccount from "@/features/accounts/components/CreateAccount";
 import SavvyBanner from '@/components/Banner/SavvyBanner';
 import { Button } from "@/components/ui/button";
-import { Account } from "@/features/accounts/types/account.type";
+import { Account, CreateAccountDto } from "@/features/accounts/types/account.type";
 
 export default function AccountsPage() {
   const { accounts, loading, create } = useAccounts();
@@ -14,7 +14,7 @@ export default function AccountsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<Account | null>(null);
 
-  const handleSubmit = async (data: { name: string; description: string }) => {
+  const handleSubmit = async (data: CreateAccountDto) => {
     const success = await create(data);
     if (success) {
       setModalOpen(false);

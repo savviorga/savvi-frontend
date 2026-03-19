@@ -30,7 +30,7 @@ function isInCurrentMonth(dateStr: string) {
 export default function BudgetPage() {
   const { categories, loading: loadingCategories } = useCategories();
   const { transactions, loading: loadingTransactions } = useTransactions();
-  const { budgets, loading: loadingBudgets, createOrUpdate } = useBudgets();
+  const { budgets, loading: loadingBudgets, createOrUpdate, remove } = useBudgets();
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -126,6 +126,10 @@ export default function BudgetPage() {
     }
   }
 
+  async function handleDeleteBudget(id: string) {
+    await remove(id);
+  }
+
   const loading = loadingCategories || loadingTransactions || loadingBudgets;
 
   return (
@@ -141,7 +145,7 @@ export default function BudgetPage() {
         </Button>
       </div>
 
-      <BudgetTable items={rows} loading={loading} />
+      <BudgetTable items={rows} loading={loading} onDelete={handleDeleteBudget} />
 
       <BudgetModal
         open={modalOpen}

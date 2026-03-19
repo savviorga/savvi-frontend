@@ -1,6 +1,7 @@
 "use client";
 
 import CustomTable, { Column } from "@/components/Table/CustomTable";
+import DeleteButton from "@/components/Buttons/DeleteButton";
 
 export interface BudgetRow {
   id: string;
@@ -15,9 +16,14 @@ export interface BudgetRow {
 interface BudgetTableProps {
   items: BudgetRow[];
   loading: boolean;
+  onDelete?: (id: string) => void;
 }
 
-export default function BudgetTable({ items, loading }: BudgetTableProps) {
+export default function BudgetTable({
+  items,
+  loading,
+  onDelete,
+}: BudgetTableProps) {
   const columns: Column<BudgetRow>[] = [
     {
       key: "name",
@@ -114,6 +120,20 @@ export default function BudgetTable({ items, loading }: BudgetTableProps) {
               </div>
             )}
           </div>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (row) => {
+        if (!onDelete) return null;
+        return (
+          <DeleteButton
+            label="Eliminar"
+            onDelete={() => onDelete(row.id)}
+            confirmMessage="¿Eliminar este presupuesto? Esta acción no se puede deshacer."
+          />
         );
       },
     },

@@ -40,6 +40,24 @@ export function useBudgets() {
     }
   }
 
+  async function remove(id: string): Promise<boolean> {
+    try {
+      setLoading(true);
+      await BudgetService.remove(id);
+      await load();
+      toast.success("Presupuesto eliminado");
+      return true;
+    } catch (error) {
+      if (isApiError(error)) {
+        getErrorMessages(error).forEach((msg) => toast.error(msg));
+      } else {
+        toast.error("Error al eliminar el presupuesto");
+      }
+      setLoading(false);
+      return false;
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -48,6 +66,7 @@ export function useBudgets() {
     budgets,
     loading,
     createOrUpdate,
+    remove,
     reload: load,
   };
 }

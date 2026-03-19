@@ -20,6 +20,7 @@ import SummaryCards from "@/features/dashboard/components/SummaryCards";
 import EvolutionChart from "@/features/dashboard/components/EvolutionChart";
 import ExpensesByCategoryChart from "@/features/dashboard/components/ExpensesByCategoryChart";
 import InsightCards from "@/features/dashboard/components/InsightCards";
+import PeriodSelector from "../../src/features/dashboard/components/PeriodSelector";
 
 const now = new Date();
 
@@ -71,15 +72,6 @@ export default function DashboardPage() {
     [transactions, period]
   );
 
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    value: i,
-    label: format(new Date(2024, i), "MMMM", { locale: es }),
-  }));
-  const years = Array.from(
-    { length: 5 },
-    (_, i) => now.getFullYear() - 2 + i
-  );
-
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -96,72 +88,14 @@ export default function DashboardPage() {
       />
 
       {/* Selector de periodo */}
-      <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
-        <span className="text-sm font-medium text-slate-600">Periodo:</span>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setPeriodType("month")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              periodType === "month"
-                ? "bg-emerald-500 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            Por mes
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodType("year")}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              periodType === "year"
-                ? "bg-emerald-500 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            Por año
-          </button>
-        </div>
-        {periodType === "month" && (
-          <>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              {months.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-        {periodType === "year" && (
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+      <PeriodSelector
+        periodType={periodType}
+        month={month}
+        year={year}
+        onPeriodTypeChange={setPeriodType}
+        onMonthChange={setMonth}
+        onYearChange={setYear}
+      />
 
       {/* Resumen: ingresos, gastos, balance */}
       <section className="mb-8">

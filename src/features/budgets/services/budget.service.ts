@@ -25,5 +25,13 @@ export const BudgetService = {
     });
     return handleResponse<Budget>(res);
   },
+
+  remove: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const error: ApiError = await res.json();
+      throw error;
+    }
+  },
 };
 

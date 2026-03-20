@@ -32,6 +32,15 @@ export default function AccountTable({
       ),
     },
     {
+      key: "isCredit",
+      header: "Crédito",
+      render: (account) => (
+        <p className={account.isCredit ? "text-emerald-700 font-semibold" : "text-slate-500"}>
+          {account.isCredit ? "Sí" : "No"}
+        </p>
+      ),
+    },
+    {
       key: "status",
       header: "Estado",
       render: account => <StatusBadge active={account.isActive} />,

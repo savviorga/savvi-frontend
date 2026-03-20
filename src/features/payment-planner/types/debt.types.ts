@@ -14,6 +14,7 @@ export interface Debt {
   id: string;
   name: string;
   payee: string;
+  accountId?: string | null;
   totalAmount: number;
   remainingAmount: number;
   dueDate: string;
@@ -30,6 +31,7 @@ export interface Debt {
 export interface CreateDebtDto {
   name: string;
   payee: string;
+  accountId: string;
   totalAmount: number;
   dueDate: string;
   notes?: string;
@@ -41,6 +43,7 @@ export interface CreateDebtDto {
 export interface UpdateDebtDto {
   name?: string;
   payee?: string;
+  accountId?: string | null;
   totalAmount?: number;
   dueDate?: string;
   notes?: string;

@@ -26,6 +26,7 @@ interface RegisterPaymentModalProps {
   accounts: Account[];
   categories: Category[];
   onSubmit: (debtId: string, payload: RegisterPaymentDto) => Promise<boolean>;
+  defaultAccountId?: string;
   loading?: boolean;
 }
 
@@ -36,11 +37,12 @@ export default function RegisterPaymentModal({
   accounts,
   categories,
   onSubmit,
+  defaultAccountId,
   loading = false,
 }: RegisterPaymentModalProps) {
   const [date, setDate] = useState<Date | null>(new Date());
   const [amount, setAmount] = useState<number | null>(null);
-  const [account, setAccount] = useState("");
+  const [account, setAccount] = useState(defaultAccountId ?? "");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
 
@@ -51,11 +53,11 @@ export default function RegisterPaymentModal({
     if (open && debt) {
       setDate(new Date());
       setAmount(null);
-      setAccount("");
+      setAccount(defaultAccountId ?? "");
       setCategory("");
       setDescription(`Pago: ${debt.name} - ${debt.payee}`);
     }
-  }, [open, debt]);
+  }, [open, debt, defaultAccountId]);
 
   if (!open || !debt) return null;
 

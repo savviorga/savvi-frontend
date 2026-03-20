@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import SavvySelect from "@/components/Select/Select";
 import type { Debt, CreateDebtDto, RecurrenceType } from "../../types/debt.types";
+import type { Account } from "@/features/transactions/types/catalog.types";
 
 function formatDateForInput(iso: string) {
   return iso.slice(0, 10);
@@ -15,6 +17,8 @@ interface DebtFormModalProps {
   onClose: () => void;
   onSubmit: (payload: CreateDebtDto) => Promise<boolean>;
   editData?: Debt | null;
+  accounts?: Account[];
+  defaultAccountId?: string;
   loading?: boolean;
 }
 
@@ -23,10 +27,13 @@ export default function DebtFormModal({
   onClose,
   onSubmit,
   editData,
+  accounts = [],
+  defaultAccountId,
   loading = false,
 }: DebtFormModalProps) {
   const [name, setName] = useState("");
   const [payee, setPayee] = useState("");
+  const [accountId, setAccountId] = useState<string>("");
   const [totalAmount, setTotalAmount] = useState<string>("");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -38,6 +45,7 @@ export default function DebtFormModal({
     if (editData) {
       setName(editData.name);
       setPayee(editData.payee);
+      setAccountId(editData.accountId ?? defaultAccountId ?? "");
       setTotalAmount(String(editData.totalAmount));
       setDueDate(formatDateForInput(editData.dueDate));
       setNotes(editData.notes ?? "");
@@ -47,6 +55,7 @@ export default function DebtFormModal({
     } else {
       setName("");
       setPayee("");
+      setAccountId(defaultAccountId ?? "");
       setTotalAmount("");
       setDueDate("");
       setNotes("");
@@ -54,7 +63,7 @@ export default function DebtFormModal({
       setRecurrenceType("monthly");
       setRecurrenceDay(1);
     }
-  }, [editData, open]);
+  }, [editData, open, defaultAccountId]);
 
   if (!open) return null;
 
@@ -62,9 +71,11 @@ export default function DebtFormModal({
     e.preventDefault();
     const num = parseFloat(totalAmount.replace(/,/g, "."));
     if (Number.isNaN(num) || num <= 0) return;
+    if (!accountId) return;
     const success = await onSubmit({
       name,
       payee,
+      accountId,
       totalAmount: num,
       dueDate,
       notes: notes.trim() || undefined,
@@ -123,6 +134,19 @@ export default function DebtFormModal({
               className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
               placeholder="Ej. Banco X"
               required
+            />
+          </div>
+
+          <div>
+            <SavvySelect
+              label="Cuenta"
+              value={accountId}
+              onChange={setAccountId}
+              placeholder="Selecciona una cuenta"
+              options={accounts.map((a) => ({
+                label: a.name,
+                value: a.id,
+              }))}
             />
           </div>
           <div>

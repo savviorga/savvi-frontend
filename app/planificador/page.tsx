@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import { Button } from "@/components/ui/button";
 import { usePaymentPlanner } from "@/features/payment-planner/hooks/usePaymentPlanner";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useCategories } from "@/features/categories/hooks/useCategories";
+import SavvySelect from "@/components/Select/Select";
 import DebtFormModal from "@/features/payment-planner/components/DebtFormModal";
 import RegisterPaymentModal from "@/features/payment-planner/components/RegisterPaymentModal";
 import DebtCard from "@/features/payment-planner/components/DebtCard";
@@ -25,6 +26,8 @@ export default function PlanificadorPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editDebt, setEditDebt] = useState<Debt | null>(null);
   const [registerPaymentDebt, setRegisterPaymentDebt] = useState<Debt | null>(null);
+  const [selectedPaymentAccountId, setSelectedPaymentAccountId] =
+    useState<string>("");
 
   const {
     debts,
@@ -38,6 +41,12 @@ export default function PlanificadorPage() {
   } = usePaymentPlanner();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
+
+  useEffect(() => {
+    if (!selectedPaymentAccountId && accounts.length > 0) {
+      setSelectedPaymentAccountId(accounts[0].id);
+    }
+  }, [accounts, selectedPaymentAccountId]);
 
   const pendingDebts = debts.filter((d) => d.status === "pending");
   const paidDebts = debts.filter((d) => d.status === "paid");
@@ -69,7 +78,7 @@ export default function PlanificadorPage() {
   return (
     <>
       <SavvyBanner
-        title="Planificador de pagos"
+        title="Mis deudas"
         subtitle="Organiza tus obligaciones y registra pagos. Al registrar un pago, se crea automáticamente una transacción de gasto."
       />
 
@@ -203,6 +212,8 @@ export default function PlanificadorPage() {
         onSubmit={handleSubmitDebt}
         editData={editDebt}
         loading={loading}
+        accounts={accounts}
+        defaultAccountId={selectedPaymentAccountId}
       />
 
       <RegisterPaymentModal
@@ -211,6 +222,7 @@ export default function PlanificadorPage() {
         debt={registerPaymentDebt}
         accounts={accounts}
         categories={categories}
+        defaultAccountId={registerPaymentDebt?.accountId ?? selectedPaymentAccountId}
         onSubmit={async (debtId, payload) => {
           const ok = await registerPayment(debtId, payload);
           if (ok) setRegisterPaymentDebt(null);

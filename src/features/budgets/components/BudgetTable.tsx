@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
 import DeleteButton from "@/components/Buttons/DeleteButton";
 
@@ -11,6 +13,8 @@ export interface BudgetRow {
   spent: number;
   remaining: number;
   usagePercent: number | null;
+  /** Partidas de detalle (facturas, servicios, etc.) */
+  detailCount: number;
 }
 
 interface BudgetTableProps {
@@ -33,6 +37,12 @@ export default function BudgetTable({
           <span className="font-medium text-slate-800">{row.name}</span>
           <span className="text-xs text-slate-400">
             Presupuesto para {row.periodLabel}
+            {row.detailCount > 0 ? (
+              <span className="text-emerald-600">
+                {" "}
+                · {row.detailCount} partida{row.detailCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
           </span>
         </div>
       ),
@@ -126,14 +136,26 @@ export default function BudgetTable({
     {
       key: "actions",
       header: "",
+      className: "text-right w-36",
       render: (row) => {
-        if (!onDelete) return null;
         return (
-          <DeleteButton
-            label="Eliminar"
-            onDelete={() => onDelete(row.id)}
-            confirmMessage="¿Eliminar este presupuesto? Esta acción no se puede deshacer."
-          />
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <Link
+              href={`/budget/${row.id}`}
+              className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
+              title="Detalle (facturas, servicios…)"
+              aria-label="Ver detalle del presupuesto"
+            >
+              <ClipboardDocumentListIcon className="size-4" />
+            </Link>
+            {onDelete && (
+              <DeleteButton
+                label="Eliminar"
+                onDelete={() => onDelete(row.id)}
+                confirmMessage="¿Eliminar este presupuesto? Esta acción no se puede deshacer."
+              />
+            )}
+          </div>
         );
       },
     },

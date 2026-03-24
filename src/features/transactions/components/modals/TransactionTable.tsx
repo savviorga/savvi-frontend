@@ -19,7 +19,7 @@ export default function TransactionTable({
   loading,
   onShow,
 }: TransactionTableProps) {
-  const [setPage] = useState(1);
+  const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
 
   const columns: Column<Transaction>[] = [
@@ -29,12 +29,10 @@ export default function TransactionTable({
       render: (item) => <FlowIconTransaction type={item.type} />,
     },
     {
-      key: "id",
-      header: "Transaction ID",
+      key: "date",
+      header: "Fecha",
       render: (item) => (
-        <span className="text-gray-500">
-          #{item.id.slice(0, 8)}…
-        </span>
+        <span className="text-gray-500">{item.date}</span>
       ),
     },
     {
@@ -47,13 +45,6 @@ export default function TransactionTable({
         >
           {item.description}
         </p>
-      ),
-    },
-    {
-      key: "date",
-      header: "Fecha",
-      render: (item) => (
-        <span className="text-gray-500">{item.date}</span>
       ),
     },
     {

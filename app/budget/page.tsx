@@ -30,7 +30,12 @@ function isInCurrentMonth(dateStr: string) {
 export default function BudgetPage() {
   const { categories, loading: loadingCategories } = useCategories();
   const { transactions, loading: loadingTransactions } = useTransactions();
-  const { budgets, loading: loadingBudgets, createOrUpdate, remove } = useBudgets();
+  const {
+    budgets,
+    loading: loadingBudgets,
+    createOrUpdate,
+    remove,
+  } = useBudgets();
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -56,9 +61,9 @@ export default function BudgetPage() {
           b.year === currentYear &&
           b.month === currentMonth
       )
-      .map((b) => {
+      .flatMap((b) => {
         const cat = byId[b.categoryId];
-        if (!cat) return null;
+        if (!cat) return [];
 
         const spent = transactions
           .filter(
@@ -89,7 +94,7 @@ export default function BudgetPage() {
 
         const periodLabel = `${b.month.toString().padStart(2, "0")}/${b.year}`;
 
-        return {
+        const row: BudgetRow = {
           id: b.id,
           name: cat.name,
           periodLabel,
@@ -97,9 +102,10 @@ export default function BudgetPage() {
           spent,
           remaining,
           usagePercent,
+          detailCount: b.details?.length ?? 0,
         };
-      })
-      .filter((row): row is BudgetRow => row !== null);
+        return [row];
+      });
   }, [budgets, categories, transactions, currentYear, currentMonth]);
 
   async function handleCreateBudget(payload: {
@@ -107,11 +113,13 @@ export default function BudgetPage() {
     year: number;
     month: number;
     amount: number;
+    amountAutoCalculated: boolean;
   }) {
     try {
       const ok = await createOrUpdate({
         categoryId: payload.categoryId,
         amount: payload.amount,
+        amountAutoCalculated: payload.amountAutoCalculated,
         period: "monthly",
         year: payload.year,
         month: payload.month,

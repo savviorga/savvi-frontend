@@ -21,6 +21,10 @@ import EvolutionChart from "@/features/dashboard/components/EvolutionChart";
 import ExpensesByCategoryChart from "@/features/dashboard/components/ExpensesByCategoryChart";
 import InsightCards from "@/features/dashboard/components/InsightCards";
 import PeriodSelector from "../../src/features/dashboard/components/PeriodSelector";
+import { useReminders } from "@/features/transfer-templates/hooks/useReminders";
+import ExecuteTransferModal from "@/features/transfer-templates/components/ExecuteTransferModal";
+import { TransferTemplatesService } from "@/features/transfer-templates/services/transfer-templates.service";
+import type { TransferTemplate, Reminder } from "@/features/transfer-templates/types/transfer.types";
 
 const now = new Date();
 
@@ -29,8 +33,12 @@ export default function DashboardPage() {
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear] = useState(now.getFullYear());
 
-  const { transactions, loading } = useTransactions();
+  const { transactions, loading, reload: reloadTransactions } = useTransactions();
   const { categories } = useCategories();
+  const { reminders, loading: remindersLoading, reload: reloadReminders, dismiss } = useReminders();
+
+  const [payOpen, setPayOpen] = useState(false);
+  const [payReminder, setPayReminder] = useState<Reminder | null>(null);
 
   const period: Period = useMemo(
     () => ({ type: periodType, month, year }),
@@ -87,6 +95,70 @@ export default function DashboardPage() {
         subtitle="Resumen por periodo: ingresos, gastos, balance y evolución."
       />
 
+      {/* Recordatorios de transferencias recurrentes */}
+      {!remindersLoading && reminders.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+                <span>🔔</span>
+                Tienes {reminders.length} pagos por confirmar hoy
+              </p>
+              <p className="mt-1 text-xs text-emerald-800/70">
+                Revisa el monto sugerido y confirma cuando estés listo.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {reminders.map((r) => {
+              const tpl: TransferTemplate | undefined = r.template;
+              const suggested = tpl?.lastAmount ?? null;
+
+              return (
+                <div
+                  key={r.id}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-emerald-200/60 bg-white/80 p-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {tpl?.name ?? "Plantilla"} —{" "}
+                      {suggested == null ? "-" : `$${Number(suggested).toLocaleString("es-CO")}`}{" "}
+                      <span className="text-xs font-medium text-slate-500">
+                        (sugerido)
+                      </span>
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {tpl?.payeeName ?? ""}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setPayReminder(r);
+                        setPayOpen(true);
+                      }}
+                      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                    >
+                      Pagar
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await dismiss(r.id);
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Posponer
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Selector de periodo */}
       <PeriodSelector
         periodType={periodType}
@@ -121,6 +193,28 @@ export default function DashboardPage() {
       <section>
         <ExpensesByCategoryChart data={byCategory} categoryNames={categoryNames} />
       </section>
+
+      <ExecuteTransferModal
+        open={payOpen}
+        onClose={() => {
+          setPayOpen(false);
+          setPayReminder(null);
+        }}
+        template={(payReminder?.template ?? null) as TransferTemplate | null}
+        initialAmount={payReminder?.template?.lastAmount ?? null}
+        onConfirm={async ({ amount, description }) => {
+          if (!payReminder?.template) return;
+          await TransferTemplatesService.execute(payReminder.template.id, {
+            templateId: payReminder.template.id,
+            amount,
+            description,
+          });
+          setPayOpen(false);
+          setPayReminder(null);
+          await reloadTransactions();
+          await reloadReminders();
+        }}
+      />
     </>
   );
 }

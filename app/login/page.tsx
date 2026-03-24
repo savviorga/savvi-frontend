@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -15,7 +15,7 @@ function safeRedirectUrl(callbackUrl: string | null): string {
   return path;
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, loading, isAuthenticated, status } = useAuth();
@@ -44,7 +44,8 @@ export default function LoginPage() {
     return result;
   };
 
-  const showInitialLoading = status === "loading" && !initialCheckDone.current;
+  const showInitialLoading =
+    status === "loading" && !initialCheckDone.current;
   if (showInitialLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
@@ -66,5 +67,19 @@ export default function LoginPage() {
         Al iniciar sesión serás redirigido automáticamente.
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+          <p className="text-gray-500">Cargando…</p>
+        </div>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }

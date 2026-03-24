@@ -1,5 +1,6 @@
 "use client";
 
+import type { FocusEventHandler } from "react";
 import CurrencyInput from "react-currency-input-field";
 
 interface CurrencyFieldProps {
@@ -8,6 +9,7 @@ interface CurrencyFieldProps {
     placeholder?: string;
     disabled?: boolean;
     className?: string;
+    onBlur?: FocusEventHandler<HTMLInputElement>;
 }
 
 export function CurrencyField({
@@ -16,6 +18,7 @@ export function CurrencyField({
     placeholder = "0.00",
     disabled = false,
     className = "",
+    onBlur,
 }: CurrencyFieldProps) {
     return (
         <CurrencyInput
@@ -51,6 +54,7 @@ export function CurrencyField({
             onValueChange={(_, __, values) => {
                 onChange(values?.float ?? null);
             }}
+            onBlur={onBlur}
         />
     );
 }

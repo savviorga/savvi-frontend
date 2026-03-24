@@ -1,5 +1,6 @@
 import { ApiError } from "@/types/api-error.type";
 import { Transaction, CreateTransactionDto } from "../types/transactions.types";
+import { getBearerAuthHeaders, getJsonAuthHeaders } from "@/lib/api-auth";
 
 const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/transactions`;
 
@@ -13,35 +14,45 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export const TransactionService = {
   getAll: async (): Promise<Transaction[]> => {
-    const res = await fetch(API_BASE);
+    const res = await fetch(API_BASE, {
+      headers: getBearerAuthHeaders(),
+    });
     return handleResponse<Transaction[]>(res);
   },
 
   getById: async (id: string): Promise<Transaction> => {
-    const res = await fetch(`${API_BASE}/${id}`);
+    const res = await fetch(`${API_BASE}/${id}`, {
+      headers: getBearerAuthHeaders(),
+    });
     return handleResponse<Transaction>(res);
   },
 
   create: async (payload: CreateTransactionDto): Promise<Transaction> => {
     const res = await fetch(API_BASE, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getJsonAuthHeaders(),
       body: JSON.stringify(payload),
     });
     return handleResponse<Transaction>(res);
   },
 
-  update: async (id: string, payload: Partial<CreateTransactionDto>): Promise<Transaction> => {
+  update: async (
+    id: string,
+    payload: Partial<CreateTransactionDto>
+  ): Promise<Transaction> => {
     const res = await fetch(`${API_BASE}/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getJsonAuthHeaders(),
       body: JSON.stringify(payload),
     });
     return handleResponse<Transaction>(res);
   },
 
   remove: async (id: string): Promise<void> => {
-    const res = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE}/${id}`, {
+      method: "DELETE",
+      headers: getBearerAuthHeaders(),
+    });
     if (!res.ok) {
       const error: ApiError = await res.json();
       throw error;
@@ -51,7 +62,7 @@ export const TransactionService = {
   bulk: async (items: CreateTransactionDto[]): Promise<Transaction[]> => {
     const res = await fetch(`${API_BASE}/bulk`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getJsonAuthHeaders(),
       body: JSON.stringify(items),
     });
     return handleResponse<Transaction[]>(res);
@@ -64,6 +75,7 @@ export const TransactionService = {
 
     const res = await fetch(`${API_BASE}/upload-files`, {
       method: "POST",
+      headers: getBearerAuthHeaders(),
       body: formData,
     });
 

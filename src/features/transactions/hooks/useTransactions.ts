@@ -4,6 +4,15 @@ import { TransactionService } from "../services/transaction.service";
 import { Transaction, CreateTransactionDto } from "../types/transactions.types";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
+/** Más reciente primero (fecha desc; mismo día → id para orden estable). */
+function sortTransactionsNewestFirst(list: Transaction[]): Transaction[] {
+  return [...list].sort((a, b) => {
+    const byDate = b.date.localeCompare(a.date);
+    if (byDate !== 0) return byDate;
+    return b.id.localeCompare(a.id);
+  });
+}
+
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +21,7 @@ export function useTransactions() {
     try {
       setLoading(true);
       const data = await TransactionService.getAll();
-      setTransactions(data);
+      setTransactions(sortTransactionsNewestFirst(data));
     } catch (error) {
       console.error("Error loading transactions:", error);
       setTransactions([]);
@@ -81,7 +90,9 @@ export function useTransactions() {
   async function remove(id: string): Promise<boolean> {
     try {
       await TransactionService.remove(id);
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
+      setTransactions((prev) =>
+        sortTransactionsNewestFirst(prev.filter((t) => t.id !== id))
+      );
       toast.success("Transacción eliminada exitosamente");
       return true;
     } catch (error) {

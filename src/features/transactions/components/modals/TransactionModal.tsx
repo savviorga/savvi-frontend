@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import FileUploader from "@/components/File/FileUploader";
 import FileList from "@/components/File/FileList";
 import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
@@ -10,11 +11,28 @@ import { useCategories } from "../../../categories/hooks/useCategories";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
+import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
 
 interface TransactionModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (payload: CreateTransactionDto, editingId?: string) => void;
+  onSubmitRecurring?: (payload: {
+    amount: number;
+    fromAccountId: string;
+    templateName: string;
+    payeeName: string;
+    payeeAccount?: string;
+    payeeBank?: string;
+    recurrenceType: TransferRecurrenceType;
+    frequency: TransferFrequency;
+    /** Días entre vencimientos; solo aplica si frequency === "custom". */
+    customIntervalDays?: number;
+    dayOfMonth: number; // 1-28
+    transactionType: "ingreso" | "egreso" | "transferencia";
+    description?: string;
+    files?: File[];
+  }) => void | Promise<void>;
   editData?: Transaction | null;
   categories: Category[];
   accounts: Account[];
@@ -25,6 +43,7 @@ export default function TransactionModal({
   open,
   onClose,
   onSubmit,
+  onSubmitRecurring,
   editData,
   categories,
   accounts,
@@ -38,9 +57,23 @@ export default function TransactionModal({
     account: "",
     description: "",
   });
-  const [files, setFiles] = useState<
-    (File | { name: string; url: string; size: number })[]
-  >([]);
+  // En el flujo actual los archivos precargados están deshabilitados,
+  // por lo que trabajamos únicamente con File[].
+  const [files, setFiles] = useState<File[]>([]);
+
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [payeeName, setPayeeName] = useState("");
+  const [payeeAccount, setPayeeAccount] = useState("");
+  const [payeeBank, setPayeeBank] = useState("");
+  const [recurrenceType, setRecurrenceType] =
+    useState<TransferRecurrenceType>("reminder");
+  const [frequency, setFrequency] = useState<TransferFrequency>("monthly");
+  /** Solo UI: se convierte a días al enviar si frequency === "custom". */
+  const [customIntervalAmount, setCustomIntervalAmount] = useState(1);
+  const [customIntervalUnit, setCustomIntervalUnit] = useState<
+    "days" | "weeks" | "months" | "years"
+  >("years");
+  const [dayOfMonth, setDayOfMonth] = useState<number>(1);
 
   useEffect(() => {
     if (editData) {
@@ -52,6 +85,17 @@ export default function TransactionModal({
         account: editData.account,
         description: editData.description ?? "",
       });
+
+      // Para no romper el flujo de edición, el módulo recurrente se deshabilita en edición.
+      setRecurringEnabled(false);
+      setPayeeName("");
+      setPayeeAccount("");
+      setPayeeBank("");
+      setRecurrenceType("reminder");
+      setFrequency("monthly");
+      setCustomIntervalAmount(1);
+      setCustomIntervalUnit("years");
+      setDayOfMonth(1);
     } else {
       setForm({
         date: "",
@@ -61,10 +105,36 @@ export default function TransactionModal({
         account: "",
         description: "",
       });
+
+      setRecurringEnabled(false);
+      setPayeeName("");
+      setPayeeAccount("");
+      setPayeeBank("");
+      setRecurrenceType("reminder");
+      setFrequency("monthly");
+      setCustomIntervalAmount(1);
+      setCustomIntervalUnit("years");
+      setDayOfMonth(1);
     }
 
     // setFiles(preloadedFiles);
   }, [editData, open]);
+
+  function customIntervalToDays(amount: number, unit: typeof customIntervalUnit): number {
+    const n = Math.max(1, Math.floor(Number(amount)) || 1);
+    switch (unit) {
+      case "days":
+        return n;
+      case "weeks":
+        return n * 7;
+      case "months":
+        return n * 30;
+      case "years":
+        return n * 365;
+      default:
+        return n;
+    }
+  }
 
   // Categorías filtradas por tipo: ingreso → solo categorías tipo ingreso, egreso → solo tipo egreso, transferencia → todas
   const filteredCategories = React.useMemo(() => {
@@ -122,12 +192,74 @@ export default function TransactionModal({
         <form
           onSubmit={(e) => {
             e.preventDefault();
+
+            const amount = Number(form.amount);
+            const description = form.description || undefined;
+
+            if (recurringEnabled && !editData && onSubmitRecurring) {
+              if (!Number.isFinite(amount) || amount <= 0) {
+                toast.error("Ingresa un monto válido para la transferencia");
+                return;
+              }
+              if (!form.account) {
+                toast.error("Selecciona una cuenta para la transferencia");
+                return;
+              }
+              if (!payeeName.trim()) {
+                toast.error("El destinatario es requerido");
+                return;
+              }
+
+              if (frequency === "custom") {
+                const days = customIntervalToDays(
+                  customIntervalAmount,
+                  customIntervalUnit
+                );
+                if (days < 1 || days > 3660) {
+                  toast.error("El intervalo debe estar entre 1 y 3660 días");
+                  return;
+                }
+              }
+
+              const templateName =
+                (description?.trim() ? description.trim() : payeeName.trim()).slice(
+                  0,
+                  200
+                );
+
+              const payload = {
+                amount,
+                fromAccountId: form.account,
+                templateName,
+                payeeName: payeeName.trim(),
+                payeeAccount: payeeAccount.trim() || undefined,
+                payeeBank: payeeBank.trim() || undefined,
+                recurrenceType,
+                frequency,
+                customIntervalDays:
+                  frequency === "custom"
+                    ? customIntervalToDays(
+                        customIntervalAmount,
+                        customIntervalUnit
+                      )
+                    : undefined,
+                dayOfMonth,
+                transactionType: form.type as "ingreso" | "egreso" | "transferencia",
+                description,
+                files,
+              };
+
+              onSubmitRecurring(payload);
+              return;
+            }
+
             onSubmit(
               {
                 ...form,
-                amount: Number(form.amount),
-                description: form.description || undefined,
-                files: files,
+                amount,
+                description,
+                files,
+                type: form.type as CreateTransactionDto["type"],
               },
               editData?.id
             );
@@ -225,6 +357,185 @@ export default function TransactionModal({
           rows={3}
         />
       </div>
+
+      {/** Toggle recurrente (solo en creación, no en edición) */}
+      {!editData && (
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={recurringEnabled}
+              onChange={(e) => setRecurringEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 accent-emerald-600"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Pago recurrente
+            </span>
+          </label>
+
+          {recurringEnabled && (
+            <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Destinatario
+                </label>
+                <input
+                  type="text"
+                  value={payeeName}
+                  onChange={(e) => setPayeeName(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  placeholder="Ej. Gas Natural"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Número de cuenta
+                </label>
+                <input
+                  type="text"
+                  value={payeeAccount}
+                  onChange={(e) => setPayeeAccount(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Banco
+                </label>
+                <input
+                  type="text"
+                  value={payeeBank}
+                  onChange={(e) => setPayeeBank(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-gray-700">
+                  Frecuencia
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { label: "Semanal", value: "weekly" },
+                    { label: "Quincenal", value: "biweekly" },
+                    { label: "Mensual", value: "monthly" },
+                    { label: "Bimestral", value: "bimonthly" },
+                    { label: "Personalizado", value: "custom" },
+                  ] as const).map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => setFrequency(opt.value)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        frequency === opt.value
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {frequency === "custom" && (
+                  <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <div className="min-w-[5rem] flex-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                        Cada
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={3660}
+                        value={customIntervalAmount}
+                        onChange={(e) =>
+                          setCustomIntervalAmount(Number(e.target.value))
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                      />
+                    </div>
+                    <div className="min-w-[8rem] flex-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                        Unidad
+                      </label>
+                      <select
+                        value={customIntervalUnit}
+                        onChange={(e) =>
+                          setCustomIntervalUnit(
+                            e.target.value as typeof customIntervalUnit
+                          )
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                      >
+                        <option value="days">Día(s)</option>
+                        <option value="weeks">Semana(s)</option>
+                        <option value="months">Mes(es) (30 días)</option>
+                        <option value="years">Año(s) (365 días)</option>
+                      </select>
+                    </div>
+                    <p className="w-full text-xs text-slate-600">
+                      ≈{" "}
+                      <span className="font-semibold text-emerald-800">
+                        {customIntervalToDays(
+                          customIntervalAmount,
+                          customIntervalUnit
+                        )}{" "}
+                        días
+                      </span>{" "}
+                      entre cada vencimiento
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-gray-700">
+                  Tipo
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { label: "Recordatorio", value: "reminder" },
+                    { label: "Automático", value: "automatic" },
+                  ] as const).map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => setRecurrenceType(opt.value)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        recurrenceType === opt.value
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {frequency !== "custom" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Día del mes (1-28)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={dayOfMonth}
+                    onChange={(e) => setDayOfMonth(Number(e.target.value))}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col justify-center border-t border-gray-300">
         <h1 className="text-md font-bold py-2">Subir Documentos</h1>

@@ -12,6 +12,8 @@ export interface DebtPayment {
 
 export interface Debt {
   id: string;
+  /** Asignado por el backend según el usuario autenticado. */
+  userId?: string;
   name: string;
   payee: string;
   accountId?: string | null;

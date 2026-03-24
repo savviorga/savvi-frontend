@@ -1,6 +1,7 @@
 import React, { useState, Fragment, useEffect } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import FileList from "@/components/File/FileList";
+import { getBearerAuthHeaders } from "@/lib/api-auth";
 import { FlowIconTransaction } from "../FlowIconTransaction";
 
 type DocumentItem = {
@@ -45,11 +46,13 @@ export default function ViewModal({
   onClose,
   data,
   onDelete,
+  accounts,
 }: {
   open: boolean;
   onClose: () => void;
   data: any | null;
   onDelete?: (id: string) => void;
+  accounts?: { id: string; name: string }[];
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [files, setFiles] = useState<DocumentItem[]>([]);
@@ -66,7 +69,10 @@ export default function ViewModal({
 
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/transactions/${data.id}/documents`,
-          { signal: controller.signal }
+          {
+            signal: controller.signal,
+            headers: getBearerAuthHeaders(),
+          }
         );
 
         if (!res.ok) throw new Error();
@@ -89,6 +95,16 @@ export default function ViewModal({
   }, [open, data?.id]);
 
   if (!open || !data) return null;
+
+  const description: string = data.description ?? "";
+  const transferTemplateId =
+    typeof description === "string"
+      ? description.match(/transfer_template_id:([a-zA-Z0-9-]+)/)?.[1] ?? null
+      : null;
+
+  const accountId = data.account as string | undefined;
+  const accountName =
+    accounts?.find((a) => a.id === accountId)?.name ?? accountId ?? "-";
 
   return (
     <>
@@ -147,7 +163,12 @@ export default function ViewModal({
                       strong
                     />
                     <Info label="Categoría" value={data.category} />
-                    <Info label="Cuenta" value={data.account} />
+                    <Info label="Cuenta" value={accountName} />
+                    <Info label="Descripción" value={data.description ?? "-"} />
+                    <Info
+                      label="Plantilla recurrente"
+                      value={transferTemplateId ?? "-"}
+                    />
                   </div>
 
                   <div>

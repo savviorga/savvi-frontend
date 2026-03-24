@@ -5,7 +5,7 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
 import SavvySelect from "@/components/Select/Select";
-import type { Debt, CreateDebtDto, RecurrenceType } from "../../types/debt.types";
+import type { Debt, CreateDebtDto, RecurrenceType } from "../types/debt.types";
 import type { Account } from "@/features/transactions/types/catalog.types";
 
 function formatDateForInput(iso: string) {

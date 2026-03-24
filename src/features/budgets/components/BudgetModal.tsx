@@ -12,6 +12,8 @@ interface BudgetModalForm {
   categoryId: string;
   period: string; // YYYY-MM
   amount: number | null;
+  /** Calcular el límite sumando las partidas (detalle del presupuesto). */
+  autoCalculate: boolean;
 }
 
 export interface BudgetModalPayload {
@@ -19,6 +21,7 @@ export interface BudgetModalPayload {
   year: number;
   month: number;
   amount: number;
+  amountAutoCalculated: boolean;
 }
 
 interface BudgetModalProps {
@@ -44,6 +47,7 @@ export function BudgetModal({
       categoryId: "",
       period: `${y}-${m}`,
       amount: null,
+      autoCalculate: false,
     };
   });
 
@@ -56,6 +60,7 @@ export function BudgetModal({
       categoryId: "",
       period: `${y}-${m}`,
       amount: null,
+      autoCalculate: false,
     });
   }, [open]);
 
@@ -63,7 +68,13 @@ export function BudgetModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.categoryId || !form.amount || form.amount <= 0) return;
+    if (!form.categoryId) return;
+    if (
+      !form.autoCalculate &&
+      (form.amount == null || !Number.isFinite(form.amount) || form.amount <= 0)
+    ) {
+      return;
+    }
     const [yearStr, monthStr] = form.period.split("-");
     const year = Number(yearStr);
     const month = Number(monthStr);
@@ -73,7 +84,8 @@ export function BudgetModal({
       categoryId: form.categoryId,
       year,
       month,
-      amount: form.amount,
+      amount: form.autoCalculate ? 0 : form.amount!,
+      amountAutoCalculated: form.autoCalculate,
     });
   };
 
@@ -134,19 +146,52 @@ export function BudgetModal({
             />
           </div>
 
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={form.autoCalculate}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setForm((f) => ({
+                    ...f,
+                    autoCalculate: checked,
+                    amount: checked ? 0 : null,
+                  }));
+                }}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Calcular automáticamente
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-600">
+                  El límite será la suma de los montos estimados de las partidas que
+                  agregues en el detalle del presupuesto.
+                </span>
+              </span>
+            </label>
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               Presupuesto (COP)
             </label>
             <CurrencyField
-              value={form.amount}
+              value={form.autoCalculate ? 0 : form.amount}
               onChange={(value) =>
                 setForm((f) => ({
                   ...f,
                   amount: value,
                 }))
               }
+              disabled={form.autoCalculate}
             />
+            {form.autoCalculate ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Desactivá el cálculo automático para ingresar un monto manual.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex justify-end space-x-3 border-t border-gray-300 pt-4">
@@ -162,7 +207,14 @@ export function BudgetModal({
               type="submit"
               variant="default"
               className="rounded-xl"
-              disabled={loading}
+              disabled={
+                loading ||
+                !form.categoryId ||
+                (!form.autoCalculate &&
+                  (form.amount == null ||
+                    !Number.isFinite(form.amount) ||
+                    form.amount <= 0))
+              }
             >
               Guardar
             </Button>

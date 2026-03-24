@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -15,7 +15,7 @@ function safeRedirectUrl(callbackUrl: string | null): string {
   return path;
 }
 
-export default function RegisterPage() {
+function RegisterPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { register, loading, isAuthenticated, status } = useAuth();
@@ -64,5 +64,19 @@ export default function RegisterPage() {
       </Link>
       <RegisterForm onSubmit={handleSubmit} loading={loading} />
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+          <p className="text-gray-500">Cargando…</p>
+        </div>
+      }
+    >
+      <RegisterPageInner />
+    </Suspense>
   );
 }

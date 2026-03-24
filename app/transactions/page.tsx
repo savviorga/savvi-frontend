@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
+import { TransactionService } from "@/features/transactions/services/transaction.service";
+import { TransferTemplatesService } from "@/features/transfer-templates/services/transfer-templates.service";
 
 import TransactionTable from "@/features/transactions/components/modals/TransactionTable";
 import TransactionModal from "@/features/transactions/components/modals/TransactionModal";
@@ -15,12 +17,21 @@ import ViewModal from "@/features/transactions/components/modals/ViewModal";
 
 import { Button } from "@/components/ui/button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
+import toast from "react-hot-toast";
+import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
 // TODO: Add banner
 export default function TransactionsPage() {
   const [viewData, setViewData] = useState<Transaction | null>(null);
 
-  const { transactions, loading: loadingTransactions, remove, create, show } = useTransactions();
+  const {
+    transactions,
+    loading: loadingTransactions,
+    remove,
+    create,
+    show,
+    reload,
+  } = useTransactions();
   const { categories } = useCategories();
   const { accounts } = useAccounts();
 
@@ -35,6 +46,69 @@ export default function TransactionsPage() {
     if (success) {
       setModalOpen(false);
       setEditData(null);
+    }
+  };
+
+  const handleRecurringSubmit = async (payload: {
+    amount: number;
+    fromAccountId: string;
+    templateName: string;
+    payeeName: string;
+    payeeAccount?: string;
+    payeeBank?: string;
+    recurrenceType: "reminder" | "automatic";
+    frequency:
+      | "weekly"
+      | "biweekly"
+      | "monthly"
+      | "bimonthly"
+      | "custom";
+    customIntervalDays?: number;
+    dayOfMonth: number;
+    transactionType: "ingreso" | "egreso" | "transferencia";
+    description?: string;
+    files?: File[];
+  }) => {
+    try {
+      const template = await TransferTemplatesService.create({
+        fromAccountId: payload.fromAccountId,
+        name: payload.templateName,
+        payeeName: payload.payeeName,
+        payeeAccount: payload.payeeAccount,
+        payeeBank: payload.payeeBank,
+        initialAmount: payload.amount,
+        recurrenceType: payload.recurrenceType,
+        frequency: payload.frequency,
+        ...(payload.frequency === "custom" &&
+        payload.customIntervalDays != null
+          ? { customIntervalDays: payload.customIntervalDays }
+          : {}),
+        dayOfMonth: payload.dayOfMonth,
+      });
+
+      const result = await TransferTemplatesService.execute(template.id, {
+        templateId: template.id,
+        amount: payload.amount,
+        transactionType: payload.transactionType,
+        description: payload.description,
+      });
+
+      // Si el usuario adjuntó documentos, los subimos al transaction creada.
+      const transaction = result.transaction as any;
+      if (payload.files?.length && transaction?.id) {
+        await TransactionService.uploadFiles(transaction.id, payload.files);
+      }
+
+      await reload();
+      setModalOpen(false);
+      setEditData(null);
+      toast.success("Transferencia recurrente creada y ejecutada");
+    } catch (error) {
+      if (isApiError(error)) {
+        getErrorMessages(error).forEach((msg) => toast.error(msg));
+      } else {
+        toast.error("Error al crear la transferencia recurrente");
+      }
     }
   };
 
@@ -89,6 +163,7 @@ export default function TransactionsPage() {
         open={modalOpen}
         onClose={handleClose}
         onSubmit={handleSubmit}
+        onSubmitRecurring={handleRecurringSubmit}
         editData={editData}
         categories={categories}
         accounts={accounts}
@@ -99,6 +174,7 @@ export default function TransactionsPage() {
         open={viewOpen}
         onClose={() => setViewOpen(false)}
         data={viewData}
+        accounts={accounts}
       />
     </>
   );

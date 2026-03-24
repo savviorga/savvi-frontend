@@ -7,7 +7,7 @@ import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
 import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
-import type { Debt, RegisterPaymentDto } from "../../types/debt.types";
+import type { Debt, RegisterPaymentDto } from "../types/debt.types";
 import type { Account } from "@/features/transactions/types/catalog.types";
 import type { Category } from "@/features/categories/types/category.type";
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { AccountService } from "../services/account.service";
-import { Account } from "../types/account.type";
+import { AccountService } from "../features/accounts/services/account.service";
+import type { Account } from "../features/accounts/types/account.type";
 
 export function useDocuments() {
   const [documents, setDocuments] = useState<Account[]>([]);

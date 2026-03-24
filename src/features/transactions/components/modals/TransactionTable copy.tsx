@@ -84,7 +84,7 @@ export default function TransactionTable({
               <td className="px-6 py-4 text-right">
                 <button
                   className="cursor-pointer rounded-full border border-blue-600 px-4 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 transition"
-                  onClick={() => onShow(item.id)}
+                  onClick={() => onShow?.(item.id)}
                 >
                   Ver
                 </button>

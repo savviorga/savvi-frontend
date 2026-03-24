@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import Header from "@/features/layout/Header";
+import MainLayout from "@/layouts/MainLayout";
 import ToasterCustom from "@/components/FeedBack/ToasterCustom";
 import { AuthProvider } from "@/features/auth/context/AuthContext";
 
@@ -35,7 +36,7 @@ export default function RootLayout({
         <AuthProvider>
           <ToasterCustom />
           <Header />
-          {children}
+          <MainLayout>{children}</MainLayout>
         </AuthProvider>
       </body>
     </html>

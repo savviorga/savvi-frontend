@@ -5,7 +5,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import Header from "@/features/layout/Header";
 import SideBarMenu from "./SideBarMenu";
 
-const AUTH_ONLY_ROUTES_HIDE_SIDEBAR = ["/login", "/register"];
+const AUTH_ONLY_ROUTES_HIDE_SIDEBAR = ["/login", "/register", "/list"];
 
 /**
  * Con sesión: fila [aside min-h-screen | franja + header + contenido].

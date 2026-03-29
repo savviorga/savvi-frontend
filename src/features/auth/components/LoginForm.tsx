@@ -141,6 +141,7 @@ export default function LoginForm({ onSubmit, loading = false }: LoginFormProps)
         Continuar con Google
       </button>
 
+{/*
       <p className="mt-8 text-center text-sm text-slate-500">
         ¿No tienes cuenta?{" "}
         <Link
@@ -150,7 +151,7 @@ export default function LoginForm({ onSubmit, loading = false }: LoginFormProps)
           Regístrate gratis
         </Link>
       </p>
-
+*/}
       <p className="mt-8 flex items-start justify-center gap-2 text-center text-xs leading-relaxed text-slate-400">
         <Lock className="mt-0.5 size-3.5 shrink-0 text-slate-400" aria-hidden />
         <span>

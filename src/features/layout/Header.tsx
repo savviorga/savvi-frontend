@@ -191,12 +191,12 @@ export default function Header({ embedded = false }: HeaderProps) {
               >
                 Iniciar sesión
               </Link>
-              <Link
+              {/*<Link
                 href="/register"
                 className="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 Registrarse
-              </Link>
+              </Link> */}
             </div>
           )}
         </div>

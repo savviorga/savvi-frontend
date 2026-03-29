@@ -15,12 +15,11 @@ import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 
 import ViewModal from "@/features/transactions/components/modals/ViewModal";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import toast from "react-hot-toast";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
-// TODO: Add banner
 export default function TransactionsPage() {
   const [viewData, setViewData] = useState<Transaction | null>(null);
 
@@ -127,10 +126,10 @@ export default function TransactionsPage() {
 
   return (
     <>
-      {/* <SavvyBanner
+      <SavvyBanner
         title="Transacciones"
         subtitle="Gestiona las transacciones de tus cuentas para un mejor control financiero."
-      /> */}
+      />
 
       <div className="flex justify-end mb-4">
         <Button

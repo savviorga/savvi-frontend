@@ -32,17 +32,17 @@ export default function DebtCard({
 
   return (
     <div
-      className={`rounded-2xl border bg-white p-5 shadow-lg shadow-slate-200/30 ${
-        isPaid ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200/60"
+      className={`rounded-2xl border bg-white p-5 shadow-lg shadow-border/30 ${
+        isPaid ? "border-accent/30 bg-accent/10" : "border-border/60"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">{debt.name}</h3>
-          <p className="text-sm text-slate-500">A: {debt.payee}</p>
+          <h3 className="text-lg font-semibold text-foreground">{debt.name}</h3>
+          <p className="text-sm text-muted-foreground">A: {debt.payee}</p>
         </div>
         {isPaid ? (
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+          <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent-foreground">
             Pagada
           </span>
         ) : (
@@ -52,33 +52,33 @@ export default function DebtCard({
         )}
       </div>
       <div className="mt-3 flex flex-wrap gap-4 text-sm">
-        <span className="text-slate-600">
+        <span className="text-muted-foreground">
           Total: <strong>{formatMoney(total)}</strong>
         </span>
-        <span className={isPaid ? "text-emerald-600" : "text-rose-600"}>
+        <span className={isPaid ? "text-accent" : "text-rose-600"}>
           Falta: <strong>{formatMoney(remaining)}</strong>
         </span>
-        <span className="text-slate-500">
+        <span className="text-muted-foreground">
           Límite: {format(new Date(debt.dueDate), "d MMM yyyy", { locale: es })}
         </span>
       </div>
       {!isPaid && total > 0 && (
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
+            className="h-full rounded-full bg-accent transition-all"
             style={{ width: `${progress}%` }}
           />
         </div>
       )}
       {debt.notes && (
-        <p className="mt-2 text-xs text-slate-500 line-clamp-2">{debt.notes}</p>
+        <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{debt.notes}</p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         {!isPaid && (
           <button
             type="button"
             onClick={() => onRegisterPayment(debt)}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+            className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent/90"
           >
             Registrar pago
           </button>
@@ -88,7 +88,7 @@ export default function DebtCard({
             <button
               type="button"
               onClick={() => onEdit(debt)}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
             >
               Editar
             </button>

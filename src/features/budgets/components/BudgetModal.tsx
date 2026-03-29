@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import { PieChart } from "lucide-react";
+import { Button } from "@/components/ui/shadcn-button";
+import Modal from "@/components/Modal/Modal";
 import SavvySelect from "@/components/Select/Select";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { Category } from "@/features/categories/types/category.type";
@@ -64,8 +64,6 @@ export function BudgetModal({
     });
   }, [open]);
 
-  if (!open) return null;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.categoryId) return;
@@ -94,31 +92,27 @@ export function BudgetModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Cargando…</span>
-        </div>
-      )}
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Crear presupuesto"
+      description="Define el límite mensual para una categoría de gasto."
+      className="max-w-md"
+      headerIcon={
+        <PieChart className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Cargando…</span>
+          </div>
+        )}
 
-      <div className="relative w-full max-w-md animate-scaleIn rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="mb-4 flex w-full justify-end">
-          <button
-            onClick={onClose}
-            className="cursor-pointer rounded-lg p-2 transition hover:bg-red-100"
-            title="Cerrar"
-          >
-            <XMarkIcon className="h-5 w-5 text-red-600" />
-          </button>
-        </div>
-
-        <SavvyBannerLight
-          title="Crear presupuesto"
-          subtitle="Define el límite mensual para una categoría de gasto."
-        />
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <SavvySelect
               label="Categoría"
@@ -133,7 +127,7 @@ export function BudgetModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Mes
             </label>
             <input
@@ -142,11 +136,11 @@ export function BudgetModal({
               onChange={(e) =>
                 setForm((f) => ({ ...f, period: e.target.value }))
               }
-              className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="mt-1 block w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
             />
           </div>
 
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-3">
+          <div className="rounded-xl border border-accent/20 bg-accent/10 px-3 py-3">
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
@@ -159,13 +153,13 @@ export function BudgetModal({
                     amount: checked ? 0 : null,
                   }));
                 }}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                className="mt-1 h-4 w-4 rounded border-border text-accent focus:ring-accent"
               />
               <span>
-                <span className="block text-sm font-medium text-slate-800">
+                <span className="block text-sm font-medium text-foreground">
                   Calcular automáticamente
                 </span>
-                <span className="mt-0.5 block text-xs text-slate-600">
+                <span className="mt-0.5 block text-xs text-muted-foreground">
                   El límite será la suma de los montos estimados de las partidas que
                   agregues en el detalle del presupuesto.
                 </span>
@@ -174,7 +168,7 @@ export function BudgetModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Presupuesto (COP)
             </label>
             <CurrencyField
@@ -188,13 +182,13 @@ export function BudgetModal({
               disabled={form.autoCalculate}
             />
             {form.autoCalculate ? (
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Desactivá el cálculo automático para ingresar un monto manual.
               </p>
             ) : null}
           </div>
 
-          <div className="flex justify-end space-x-3 border-t border-gray-300 pt-4">
+          <div className="flex justify-end space-x-3 border-t border-border pt-4">
             <Button
               type="button"
               onClick={onClose}
@@ -221,7 +215,7 @@ export function BudgetModal({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }
 

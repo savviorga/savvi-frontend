@@ -30,10 +30,10 @@ export default function Sidebar() {
             {!isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
-                    className="fixed top-5 left-5 z-50 bg-white/90 backdrop-blur border border-gray-200 shadow-lg rounded-xl p-2 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="fixed top-5 left-5 z-50 bg-white/90 backdrop-blur border border-border shadow-lg rounded-xl p-2 transition hover:bg-accent/10 focus:outline-none focus:ring-2 focus:ring-accent"
                     aria-label="Open sidebar"
                 >
-                    <Bars3Icon className="h-6 w-6 text-blue-600" />
+                    <Bars3Icon className="h-6 w-6 text-accent" />
                 </button>
             )}
 
@@ -44,17 +44,17 @@ export default function Sidebar() {
             >
                 {/* Brand */}
                 <div>
-                    <div className="text-2xl font-bold text-blue-600 mb-10">Savvi</div>
+                    <div className="text-2xl font-bold text-accent mb-10">Savvi</div>
                     <div>
                         <button
                             onClick={() => setIsOpen(!isOpen)}
-                            className="fixed top-5 left-50 z-50 bg-white/90 backdrop-blur border border-gray-200 shadow-lg rounded-xl p-2 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            className="fixed top-5 left-50 z-50 bg-white/90 backdrop-blur border border-border shadow-lg rounded-xl p-2 transition hover:bg-accent/10 focus:outline-none focus:ring-2 focus:ring-accent"
                             aria-label="Toggle sidebar"
                         >
                             {isOpen ? (
-                                <XMarkIcon className="h-6 w-6 text-blue-600" />
+                                <XMarkIcon className="h-6 w-6 text-accent" />
                             ) : (
-                                <Bars3Icon className="h-6 w-6 text-blue-600" />
+                                <Bars3Icon className="h-6 w-6 text-accent" />
                             )}
                         </button>
                     </div>
@@ -67,7 +67,7 @@ export default function Sidebar() {
                             key={item.name}
                             href={item.href}
                             onClick={() => setIsOpen(false)} // cierra también al navegar
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-foreground hover:bg-accent/10 hover:text-accent transition"
                         >
                             <item.icon className="h-5 w-5" />
                             {item.name}
@@ -79,7 +79,7 @@ export default function Sidebar() {
                 <div className="mt-6 border-t pt-4">
                     <Link
                         href="/settings"
-                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-foreground hover:bg-background transition"
                     >
                         <Cog6ToothIcon className="h-5 w-5" />
                         Settings

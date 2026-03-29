@@ -2,13 +2,14 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import Header from "@/features/layout/Header";
 import SideBarMenu from "./SideBarMenu";
 
 const AUTH_ONLY_ROUTES_HIDE_SIDEBAR = ["/login", "/register"];
 
 /**
- * Envuelve el contenido con el menú lateral cuando hay sesión.
- * El Header no se modifica; vive en el layout raíz.
+ * Con sesión: fila [aside min-h-screen | franja + header + contenido].
+ * Sin sesión o páginas auth: solo header global y children.
  */
 export default function MainLayout({
   children,
@@ -26,13 +27,28 @@ export default function MainLayout({
     !loading && isAuthenticated && !isPublicAuthPage;
 
   if (!showSidebar) {
-    return <>{children}</>;
+    if (isPublicAuthPage) {
+      return <>{children}</>;
+    }
+    return (
+      <>
+        <Header />
+        {children}
+      </>
+    );
   }
 
   return (
-    <div className="flex w-full min-h-[calc(100vh-75px)]">
+    <div className="flex min-h-screen w-full">
       <SideBarMenu />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <div
+          className="h-[3px] shrink-0 bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500"
+          aria-hidden
+        />
+        <Header embedded />
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      </div>
     </div>
   );
 }

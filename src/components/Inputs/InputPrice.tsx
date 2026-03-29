@@ -62,7 +62,7 @@ export default function InputPrice({
 
   return (
     <div className="flex flex-col w-full space-y-1">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <label className="text-sm font-medium text-foreground">{label}</label>
 
       <input
         type="text"
@@ -74,8 +74,8 @@ export default function InputPrice({
         placeholder={placeholder}
         className={`
           h-11 w-full rounded-xl px-3 text-sm bg-white
-          border ${error ? "border-red-500" : "border-gray-300"}
-          shadow-sm focus:ring-2 focus:ring-indigo-200
+          border ${error ? "border-red-500" : "border-border"}
+          shadow-sm focus:ring-2 focus:ring-accent/25
         `}
       />
 

@@ -9,7 +9,7 @@ export default function BudgetDetailPage() {
 
   if (!id) {
     return (
-      <p className="py-8 text-center text-sm text-slate-500">
+      <p className="py-8 text-center text-sm text-muted-foreground">
         Identificador de presupuesto no válido.
       </p>
     );

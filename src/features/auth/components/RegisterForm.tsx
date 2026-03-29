@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
 import { RegisterDto } from "../types/auth.type";
 

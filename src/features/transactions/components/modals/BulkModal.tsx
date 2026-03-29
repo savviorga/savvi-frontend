@@ -55,7 +55,7 @@ export default function BulkModal({
               <Dialog.Panel className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 text-left">
                 <button
                   type="button"
-                  className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                  className="absolute top-3 right-3 text-gray-400 hover:text-muted-foreground"
                   onClick={onClose}
                   aria-label="Cerrar"
                 >
@@ -64,7 +64,7 @@ export default function BulkModal({
                 <Dialog.Title className="text-lg font-semibold mb-4">
                   Carga masiva JSON
                 </Dialog.Title>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-sm text-muted-foreground mb-2">
                   Pega un array JSON (ej. 10 transacciones).
                 </p>
                 <textarea
@@ -85,7 +85,7 @@ export default function BulkModal({
                   </button>
                   <button
                     onClick={handleSubmit}
-                    className="px-3 py-1 bg-indigo-600 text-white rounded"
+                    className="px-3 py-1 bg-primary text-white rounded"
                   >
                     Enviar
                   </button>

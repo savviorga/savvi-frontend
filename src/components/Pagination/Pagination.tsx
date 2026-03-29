@@ -24,7 +24,7 @@ export default function Pagination({
         className={`flex items-center gap-1 px-3 py-1 rounded-md transition ${
           currentPage === 1
             ? "text-gray-400 cursor-not-allowed"
-            : "text-blue-700 hover:bg-blue-50"
+            : "text-foreground hover:bg-accent/10"
         }`}
       >
         ‹ Previous
@@ -38,7 +38,7 @@ export default function Pagination({
           className={`w-9 h-9 rounded-lg font-medium transition ${
             page === currentPage
               ? "bg-blue-600 text-white shadow"
-              : "text-gray-700 hover:bg-gray-100"
+              : "text-foreground hover:bg-muted"
           }`}
         >
           {page}
@@ -52,7 +52,7 @@ export default function Pagination({
         className={`flex items-center gap-1 px-3 py-1 rounded-md transition ${
           currentPage === totalPages
             ? "text-gray-400 cursor-not-allowed"
-            : "text-blue-600 hover:bg-blue-50"
+            : "text-accent hover:bg-accent/10"
         }`}
       >
         Next ›

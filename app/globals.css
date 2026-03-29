@@ -41,6 +41,11 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* Marca (Button UI) */
+  --color-mint: #00d4aa;
+  --color-mint-dim: #00b892;
+  --color-cosmos: #0b0f1a;
+  --font-body: var(--font-sans);
 }
 
 :root {
@@ -76,6 +81,14 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+  /* Barra de scroll — fina y discreta (mint suave) */
+  --savvi-scrollbar-size: 6px;
+  --savvi-scrollbar-track: transparent;
+  --savvi-scrollbar-thumb-top: rgba(0, 168, 140, 0.32);
+  --savvi-scrollbar-thumb-bottom: rgba(0, 140, 115, 0.38);
+  --savvi-scrollbar-thumb-hover-top: rgba(0, 188, 155, 0.48);
+  --savvi-scrollbar-thumb-hover-bottom: rgba(0, 155, 128, 0.52);
+  --savvi-scrollbar-thumb-fallback: rgba(0, 160, 132, 0.4);
 }
 
 .dark {
@@ -110,6 +123,12 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --savvi-scrollbar-track: transparent;
+  --savvi-scrollbar-thumb-top: rgba(0, 196, 160, 0.28);
+  --savvi-scrollbar-thumb-bottom: rgba(0, 160, 130, 0.34);
+  --savvi-scrollbar-thumb-hover-top: rgba(0, 215, 180, 0.42);
+  --savvi-scrollbar-thumb-hover-bottom: rgba(0, 175, 145, 0.48);
+  --savvi-scrollbar-thumb-fallback: rgba(0, 185, 152, 0.35);
 }
 
 @layer base {
@@ -121,34 +140,65 @@
   }
 }
 
-html {
-  scrollbar-gutter: stable;
+/* Scroll vertical global + sidebar + cuerpo de modal (mismo verde/mint Savvi) */
+html,
+.scrollbar-clean,
+.scrollbar-modal {
+  scrollbar-width: thin;
+  scrollbar-color: var(--savvi-scrollbar-thumb-fallback) var(--savvi-scrollbar-track);
 }
 
+html::-webkit-scrollbar,
+.scrollbar-clean::-webkit-scrollbar,
+.scrollbar-modal::-webkit-scrollbar {
+  width: var(--savvi-scrollbar-size);
+  height: var(--savvi-scrollbar-size);
+}
 
+html::-webkit-scrollbar-track,
+.scrollbar-clean::-webkit-scrollbar-track,
+.scrollbar-modal::-webkit-scrollbar-track {
+  margin-block: 6px;
+  background: var(--savvi-scrollbar-track);
+  border-radius: 9999px;
+}
 
-@layer utilities {
-  .scrollbar-clean {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+html::-webkit-scrollbar-thumb,
+.scrollbar-clean::-webkit-scrollbar-thumb,
+.scrollbar-modal::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  background-image: linear-gradient(
+    180deg,
+    var(--savvi-scrollbar-thumb-top) 0%,
+    var(--savvi-scrollbar-thumb-bottom) 100%
+  );
+  box-shadow: none;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+.scrollbar-clean::-webkit-scrollbar-thumb:hover,
+.scrollbar-modal::-webkit-scrollbar-thumb:hover {
+  background-image: linear-gradient(
+    180deg,
+    var(--savvi-scrollbar-thumb-hover-top) 0%,
+    var(--savvi-scrollbar-thumb-hover-bottom) 100%
+  );
+  box-shadow: 0 0 6px rgba(0, 180, 150, 0.22);
+}
+
+html::-webkit-scrollbar-corner,
+.scrollbar-clean::-webkit-scrollbar-corner,
+.scrollbar-modal::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@keyframes savvi-linear-loader {
+  0% {
+    transform: translateX(-100%);
   }
-
-  .scrollbar-clean::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .scrollbar-clean::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-clean::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.35);
-    border-radius: 9999px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-
-  .scrollbar-clean::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(148, 163, 184, 0.7);
+  100% {
+    transform: translateX(350%);
   }
 }

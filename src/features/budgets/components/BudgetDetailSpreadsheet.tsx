@@ -4,15 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
-  BanknotesIcon,
-  CalculatorIcon,
   PlusCircleIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
-import SavvyBanner from "@/components/Banner/SavvyBanner";
+import SavvyBannerHome, {
+  type SavvyBannerHomeStat,
+} from "@/components/Banner/SavvyBannerHome";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import { BudgetService } from "../services/budget.service";
 import type { Budget, BudgetDetail } from "../types/budget.type";
 import toast from "react-hot-toast";
@@ -83,7 +83,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
     setBudget((prev) => {
       if (!prev) return prev;
       const merged = [...(prev.details ?? []), ...created].sort(
-        (a, b) => a.sortOrder - b.sortOrder
+        (a, b) => a.sortOrder - b.sortOrder,
       );
       const next: Budget = { ...prev, details: merged };
       if (prev.amountAutoCalculated) {
@@ -95,7 +95,9 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
 
   const detailRows: DetailTableRow[] = useMemo(() => {
     if (!budget?.details?.length) return [];
-    const sorted = [...budget.details].sort((a, b) => a.sortOrder - b.sortOrder);
+    const sorted = [...budget.details].sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
     return sorted.map((d, i) => ({ ...d, rowNumber: i + 1 }));
   }, [budget?.details]);
 
@@ -106,6 +108,38 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       return sum + Number(v);
     }, 0);
   }, [detailRows]);
+
+  const budgetBannerStats: SavvyBannerHomeStat[] = useMemo(() => {
+    if (!budget) {
+      return [
+        { label: "Límite mensual", value: formatCop(0), valueTone: "mint" },
+        { label: "Suma estimada", value: formatCop(0), valueTone: "mint" },
+      ];
+    }
+    const lim = Number.isFinite(Number(budget.amount))
+      ? Number(budget.amount)
+      : 0;
+    const overLimit = lim > 0 && totalEstimated > lim;
+    return [
+      {
+        label: "Límite mensual",
+        tag: budget.amountAutoCalculated ? "Automático" : undefined,
+        value: formatCop(lim),
+        hint: budget.amountAutoCalculated
+          ? "Suma de los montos estimados de las partidas (se actualiza al agregar o quitar)."
+          : "Tope asignado a esta categoría",
+        valueTone: "mint",
+      },
+      {
+        label: "Suma estimada",
+        value: formatCop(totalEstimated),
+        hint: overLimit
+          ? "Supera el límite (solo referencia)."
+          : "Suma de montos de las partidas",
+        valueTone: overLimit ? "amber" : "mint",
+      },
+    ];
+  }, [budget, totalEstimated]);
 
   async function handleAddDetail(e: React.FormEvent) {
     e.preventDefault();
@@ -120,8 +154,8 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       1,
       Math.min(
         50,
-        Number.isFinite(rawCount) && rawCount > 0 ? Math.floor(rawCount) : 1
-      )
+        Number.isFinite(rawCount) && rawCount > 0 ? Math.floor(rawCount) : 1,
+      ),
     );
 
     try {
@@ -148,9 +182,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
 
       mergeNewDetails(created);
       toast.success(
-        count === 1
-          ? "Partida agregada"
-          : `Se agregaron ${count} partidas`
+        count === 1 ? "Partida agregada" : `Se agregaron ${count} partidas`,
       );
       setNewLabel("");
       setNewDescription("");
@@ -176,7 +208,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       setBudget((prev) => {
         if (!prev) return prev;
         const nextDetails = (prev.details ?? []).filter(
-          (d) => d.id !== detailId
+          (d) => d.id !== detailId,
         );
         const next: Budget = { ...prev, details: nextDetails };
         if (prev.amountAutoCalculated) {
@@ -203,7 +235,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       header: "#",
       className: "w-14 text-center",
       render: (row) => (
-        <span className="inline-flex min-w-[1.75rem] items-center justify-center rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+        <span className="inline-flex min-w-[1.75rem] items-center justify-center rounded-lg bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
           {row.rowNumber}
         </span>
       ),
@@ -212,18 +244,18 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       key: "label",
       header: "Partida",
       render: (row) => (
-        <span className="font-medium text-slate-900">{row.label}</span>
+        <span className="font-medium text-foreground">{row.label}</span>
       ),
     },
     {
       key: "description",
       header: "Notas / ref.",
       render: (row) => (
-        <span className="text-slate-600">
+        <span className="text-muted-foreground">
           {row.description?.trim() ? (
             row.description
           ) : (
-            <span className="text-slate-400">—</span>
+            <span className="text-muted-foreground">—</span>
           )}
         </span>
       ),
@@ -235,10 +267,10 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
       render: (row) => {
         const v = row.estimatedAmount;
         if (v == null || !Number.isFinite(Number(v)) || Number(v) <= 0) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-muted-foreground">—</span>;
         }
         return (
-          <span className="font-medium tabular-nums text-emerald-700">
+          <span className="font-medium tabular-nums">
             {formatCop(Number(v))}
           </span>
         );
@@ -253,7 +285,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
           type="button"
           title="Eliminar"
           disabled={deletingId === row.id}
-          className="inline-flex rounded-lg p-2 text-slate-400 transition hover:bg-rose-100 hover:text-rose-600 disabled:opacity-40"
+          className="inline-flex rounded-lg p-2 text-muted-foreground transition hover:bg-rose-100 hover:text-rose-600 disabled:opacity-40"
           onClick={() => void handleRemove(row.id)}
         >
           <TrashIcon className="h-4 w-4" />
@@ -264,17 +296,21 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
 
   if (loading) {
     return (
-      <p className="py-16 text-center text-sm text-slate-500">Cargando…</p>
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        Cargando…
+      </p>
     );
   }
 
   if (notFound || !budget) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <p className="text-slate-600">No se encontró este presupuesto.</p>
+      <div className="rounded-2xl border border-border bg-white p-8 text-center shadow-sm">
+        <p className="text-muted-foreground">
+          No se encontró este presupuesto.
+        </p>
         <Link
           href="/budget"
-          className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:underline"
+          className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
         >
           <ArrowLeftIcon className="h-4 w-4" />
           Volver a presupuestos
@@ -285,122 +321,62 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
 
   const categoryName = budget.category?.name ?? "Categoría";
   const periodLabel = `${String(budget.month).padStart(2, "0")}/${budget.year}`;
-  const limit = Number(budget.amount);
 
   return (
     <div className="space-y-6 pb-24 sm:pb-32">
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href="/budget"
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-800"
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm font-medium text-foreground shadow-sm transition hover:border-accent/30 hover:bg-accent/10 hover:text-accent-foreground"
         >
           <ArrowLeftIcon className="h-4 w-4" />
           Presupuestos
         </Link>
       </div>
 
-      <SavvyBanner
+      <SavvyBannerHome
         title="Detalle del presupuesto"
         subtitle={`${categoryName} · ${periodLabel}`}
+        badgeLabel="Presupuesto"
+        stats={budgetBannerStats}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/80 shadow-xl shadow-slate-200/40 ring-1 ring-slate-100">
-        <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/40 via-teal-50/30 to-cyan-50/40 px-5 py-5 sm:px-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex gap-4 rounded-xl border border-white/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25">
-                <BanknotesIcon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Límite mensual
-                  {budget.amountAutoCalculated ? (
-                    <span className="ml-1.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-emerald-800">
-                      Automático
-                    </span>
-                  ) : null}
-                </p>
-                <p className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">
-                  {formatCop(Number.isFinite(limit) ? limit : 0)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {budget.amountAutoCalculated
-                    ? "Suma de los montos estimados de las partidas (se actualiza al agregar o quitar)."
-                    : "Tope asignado a esta categoría"}
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-4 rounded-xl border border-white/80 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
-              <div
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-md ${
-                  totalEstimated > limit && limit > 0
-                    ? "from-amber-400 to-orange-500 text-white shadow-amber-400/25"
-                    : "from-teal-500 to-emerald-600 text-white shadow-teal-500/25"
-                }`}
-              >
-                <CalculatorIcon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Suma estimada
-                </p>
-                <p
-                  className={`mt-0.5 text-xl font-bold tracking-tight ${
-                    totalEstimated > limit && limit > 0
-                      ? "text-amber-600"
-                      : "text-emerald-700"
-                  }`}
-                >
-                  {formatCop(totalEstimated)}
-                </p>
-                {limit > 0 && totalEstimated > limit ? (
-                  <p className="mt-1 text-xs font-medium text-amber-600">
-                    Supera el límite (solo referencia).
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Suma de montos de las partidas
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-b border-slate-100 bg-white px-5 py-5 sm:px-6">
+      <section className="overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-white via-white to-slate-50/80 shadow-xl shadow-border/40 ring-1 ring-border">
+        <div className="border-b border-border bg-white px-5 py-5 sm:px-6">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/15 text-accent">
               <PlusCircleIcon className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-foreground">
                 Agregar partida
               </h3>
-              <p className="text-xs text-slate-500">
-                Sumá facturas o conceptos (gas, luz, arriendo, etc.). Podés crear
-                varias iguales a la vez con &quot;Cantidad de partidas&quot;.
+              <p className="text-xs text-muted-foreground">
+                Sumá facturas o conceptos (gas, luz, arriendo, etc.). Podés
+                crear varias iguales a la vez con &quot;Cantidad de
+                partidas&quot;.
               </p>
             </div>
           </div>
 
           <form onSubmit={handleAddDetail} className="space-y-3">
-            <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="flex flex-col gap-4 rounded-xl border border-border/80 bg-muted/50 p-4 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="min-w-0 flex-1 sm:min-w-[180px]">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
                   Nombre de la partida
                 </label>
                 <input
                   type="text"
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   placeholder="Ej. Almuerzo, Gas, Luz"
                   maxLength={200}
                   disabled={saving}
                 />
               </div>
               <div className="w-full sm:w-32">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
                   Cantidad de partidas
                 </label>
                 <input
@@ -420,26 +396,26 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
                       setPartidaCount(Math.min(50, Math.max(1, n)));
                     }
                   }}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-foreground shadow-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   disabled={saving}
                 />
               </div>
               <div className="min-w-0 flex-1 sm:min-w-[180px]">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
                   Notas (opcional)
                 </label>
                 <input
                   type="text"
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   placeholder="Factura, proveedor, Nº…"
                   maxLength={500}
                   disabled={saving}
                 />
               </div>
               <div className="w-full sm:w-44">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
                   Monto estimado (opcional)
                 </label>
                 <CurrencyField
@@ -447,7 +423,7 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
                   onChange={setNewAmount}
                   placeholder="0"
                   disabled={saving}
-                  className="!rounded-xl !border-slate-200 !py-2.5"
+                  className="!rounded-xl !border-border !py-2.5"
                 />
               </div>
               <div className="flex w-full sm:w-auto sm:pb-0.5">
@@ -464,21 +440,21 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
                 </Button>
               </div>
             </div>
-            <p className="rounded-lg bg-emerald-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600">
-              <span className="font-medium text-emerald-800">
+            <p className="rounded-lg bg-accent/12 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-medium text-accent-foreground">
                 Cantidad &gt; 1:
               </span>{" "}
               se crean varias partidas con el{" "}
-              <strong>mismo monto estimado</strong> cada una. El nombre queda como
-              &quot;Almuerzo 1&quot;, &quot;Almuerzo 2&quot;… y en la nota se
-              concatena el número (ej. &quot;Factura enero 1&quot;). Si no hay
-              nota, se usa &quot;Parte 1&quot;, &quot;Parte 2&quot;…
+              <strong>mismo monto estimado</strong> cada una. El nombre queda
+              como &quot;Almuerzo 1&quot;, &quot;Almuerzo 2&quot;… y en la nota
+              se concatena el número (ej. &quot;Factura enero 1&quot;). Si no
+              hay nota, se usa &quot;Parte 1&quot;, &quot;Parte 2&quot;…
             </p>
           </form>
         </div>
 
         <div className="px-3 py-4 sm:px-4 sm:pb-8">
-          <h3 className="mb-3 px-1 text-sm font-semibold text-slate-800">
+          <h3 className="mb-3 px-1 text-sm font-semibold text-foreground">
             Partidas registradas
           </h3>
           <CustomTable
@@ -490,10 +466,12 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
             onPageChange={() => {}}
           />
           {detailRows.length > 0 ? (
-            <div className="mt-4 flex justify-end rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-              <p className="text-sm text-slate-600">
-                <span className="font-medium text-slate-700">Total estimado:</span>{" "}
-                <span className="text-lg font-bold tabular-nums text-emerald-800">
+            <div className="mt-4 flex justify-end rounded-xl border border-border bg-muted/80 px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  Total estimado:
+                </span>{" "}
+                <span className="text-lg font-bold tabular-nums text-accent-foreground">
                   {formatCop(totalEstimated)}
                 </span>
               </p>

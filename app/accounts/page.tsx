@@ -5,7 +5,7 @@ import { useAccounts } from '@/features/accounts/hooks/useAccounts';
 import AccountTable from "@/features/accounts/components/AccountTable";
 import CreateAccount from "@/features/accounts/components/CreateAccount";
 import SavvyBanner from '@/components/Banner/SavvyBanner';
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import { Account, CreateAccountDto } from "@/features/accounts/types/account.type";
 
 export default function AccountsPage() {

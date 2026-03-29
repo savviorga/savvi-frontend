@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { Receipt } from "lucide-react";
 import FileUploader from "@/components/File/FileUploader";
 import FileList from "@/components/File/FileList";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import Modal from "@/components/Modal/Modal";
 import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
 import { CreateTransactionDto, Transaction } from "../../types/transactions.types";
 import { Account, Category } from "../../types/catalog.types";
-import { useCategories } from "../../../categories/hooks/useCategories";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
 
@@ -77,11 +76,17 @@ export default function TransactionModal({
 
   useEffect(() => {
     if (editData) {
+      const rawCat = editData.category;
+      const categoryId =
+        categories.find((c) => c.id === rawCat)?.id ??
+        categories.find((c) => c.name === rawCat)?.id ??
+        "";
+
       setForm({
         date: editData.date?.slice(0, 10) ?? "",
         type: editData.type,
         amount: editData.amount,
-        category: editData.category,
+        category: categoryId,
         account: editData.account,
         description: editData.description ?? "",
       });
@@ -118,7 +123,7 @@ export default function TransactionModal({
     }
 
     // setFiles(preloadedFiles);
-  }, [editData, open]);
+  }, [editData, open, categories]);
 
   function customIntervalToDays(amount: number, unit: typeof customIntervalUnit): number {
     const n = Math.max(1, Math.floor(Number(amount)) || 1);
@@ -148,7 +153,7 @@ export default function TransactionModal({
       const next = { ...f, type: v };
       if (v === "ingreso" || v === "egreso") {
         const stillValid = categories.some(
-          (c) => (c.type ?? "egreso") === v && (f.category === c.id || f.category === c.name)
+          (c) => (c.type ?? "egreso") === v && f.category === c.id,
         );
         if (!stillValid) next.category = "";
       }
@@ -156,39 +161,27 @@ export default function TransactionModal({
     });
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity">
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={editData ? "Editar transacción" : "Crear transacción"}
+      description="Gestiona aquí tu transacción"
+      className="max-w-xl"
+      headerIcon={
+        <Receipt className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Cargando…</span>
+          </div>
+        )}
 
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Cargando…</span>
-        </div>
-      )}
-
-
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-8 animate-scaleIn max-h-[90vh] overflow-y-auto scrollbar-clean">
-        {/* Título */}
-
-
-        <div className="flex justify-end w-full mb-4">
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-red-100 rounded-lg transition cursor-pointer"
-            title="Cerrar"
-          >
-            <XMarkIcon className="w-5 h-5 text-red-600" />
-          </button>
-        </div>
-
-        <SavvyBannerLight
-          title={editData ? "Editar transacción" : "Crear transacción"}
-          subtitle="Gestiona aqui tu transaccion"
-        />
-
-        {/* Formulario */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -253,9 +246,14 @@ export default function TransactionModal({
               return;
             }
 
+            const categoryName =
+              categories.find((c) => c.id === form.category)?.name ??
+              form.category;
+
             onSubmit(
               {
                 ...form,
+                category: categoryName,
                 amount,
                 description,
                 files,
@@ -286,6 +284,7 @@ export default function TransactionModal({
                 value={form.type}
                 onChange={handleTypeChange}
                 placeholder="Selecciona un tipo"
+                showFlowIcons
                 options={[
                   { label: "Ingreso", value: "ingreso" },
                   { label: "Egreso", value: "egreso" },
@@ -322,29 +321,29 @@ export default function TransactionModal({
                 }
                 options={filteredCategories.map((cat) => ({
                   label: cat.name,
-                  value: cat.name,
+                  value: cat.id,
                 }))}
-              />
-            </div>
-
-            {/* Monto */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monto
-              </label>
-
-              <CurrencyField
-                value={form.amount}
-                onChange={(value) =>
-                  setForm((f) => ({ ...f, amount: value }))
-                }
               />
             </div>
           </div>
 
+          {/* Monto: fuera del grid de 2 cols para que el listado de Cuenta no quede tapado por esta celda */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">
+              Monto
+            </label>
+
+            <CurrencyField
+              value={form.amount}
+              onChange={(value) =>
+                setForm((f) => ({ ...f, amount: value }))
+              }
+            />
+          </div>
+
       {/* Descripción */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1 text-bold">
+        <label className="block text-sm font-medium text-foreground mb-1 text-bold">
           Descripción
         </label>
         <textarea
@@ -353,7 +352,7 @@ export default function TransactionModal({
           onChange={(e) =>
             setForm((f) => ({ ...f, description: e.target.value }))
           }
-          className="mt-1 block w-full rounded-xl border-1 border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white resize-none"
+          className="mt-1 block w-full rounded-xl border-1 border-border focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder:text-muted-foreground bg-white resize-none"
           rows={3}
         />
       </div>
@@ -366,57 +365,57 @@ export default function TransactionModal({
               type="checkbox"
               checked={recurringEnabled}
               onChange={(e) => setRecurringEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 accent-emerald-600"
+              className="h-4 w-4 rounded border-border accent-emerald-600"
             />
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-foreground">
               Pago recurrente
             </span>
           </label>
 
           {recurringEnabled && (
-            <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <div className="space-y-3 rounded-xl border border-accent/30 bg-accent/10 p-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   Destinatario
                 </label>
                 <input
                   type="text"
                   value={payeeName}
                   onChange={(e) => setPayeeName(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                   placeholder="Ej. Gas Natural"
                   required
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   Número de cuenta
                 </label>
                 <input
                   type="text"
                   value={payeeAccount}
                   onChange={(e) => setPayeeAccount(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                   placeholder="Opcional"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   Banco
                 </label>
                 <input
                   type="text"
                   value={payeeBank}
                   onChange={(e) => setPayeeBank(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                   placeholder="Opcional"
                 />
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-medium text-gray-700">
+                <p className="mb-2 text-sm font-medium text-foreground">
                   Frecuencia
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -433,8 +432,8 @@ export default function TransactionModal({
                       onClick={() => setFrequency(opt.value)}
                       className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                         frequency === opt.value
-                          ? "border-emerald-600 bg-emerald-600 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          ? "border-accent bg-accent text-white"
+                          : "border-border bg-white text-foreground hover:bg-muted"
                       }`}
                     >
                       {opt.label}
@@ -444,7 +443,7 @@ export default function TransactionModal({
                 {frequency === "custom" && (
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <div className="min-w-[5rem] flex-1">
-                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
                         Cada
                       </label>
                       <input
@@ -455,11 +454,11 @@ export default function TransactionModal({
                         onChange={(e) =>
                           setCustomIntervalAmount(Number(e.target.value))
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                       />
                     </div>
                     <div className="min-w-[8rem] flex-1">
-                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
                         Unidad
                       </label>
                       <select
@@ -469,7 +468,7 @@ export default function TransactionModal({
                             e.target.value as typeof customIntervalUnit
                           )
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                       >
                         <option value="days">Día(s)</option>
                         <option value="weeks">Semana(s)</option>
@@ -477,9 +476,9 @@ export default function TransactionModal({
                         <option value="years">Año(s) (365 días)</option>
                       </select>
                     </div>
-                    <p className="w-full text-xs text-slate-600">
+                    <p className="w-full text-xs text-muted-foreground">
                       ≈{" "}
-                      <span className="font-semibold text-emerald-800">
+                      <span className="font-semibold text-accent-foreground">
                         {customIntervalToDays(
                           customIntervalAmount,
                           customIntervalUnit
@@ -493,7 +492,7 @@ export default function TransactionModal({
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-medium text-gray-700">
+                <p className="mb-2 text-sm font-medium text-foreground">
                   Tipo
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -507,8 +506,8 @@ export default function TransactionModal({
                       onClick={() => setRecurrenceType(opt.value)}
                       className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                         recurrenceType === opt.value
-                          ? "border-emerald-600 bg-emerald-600 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          ? "border-accent bg-accent text-white"
+                          : "border-border bg-white text-foreground hover:bg-muted"
                       }`}
                     >
                       {opt.label}
@@ -519,7 +518,7 @@ export default function TransactionModal({
 
               {frequency !== "custom" && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Día del mes (1-28)
                   </label>
                   <input
@@ -528,7 +527,7 @@ export default function TransactionModal({
                     max={28}
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(Number(e.target.value))}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
                   />
                 </div>
               )}
@@ -537,7 +536,7 @@ export default function TransactionModal({
         </div>
       )}
 
-      <div className="flex flex-col justify-center border-t border-gray-300">
+      <div className="flex flex-col justify-center border-t border-border">
         <h1 className="text-md font-bold py-2">Subir Documentos</h1>
 
         <FileUploader
@@ -565,14 +564,12 @@ export default function TransactionModal({
       </div>
 
       {/* Botones */}
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-300">
+      <div className="flex justify-end space-x-3 pt-4 border-t border-border">
         <div>
           <Button
             onClick={onClose}
             variant="outline"
-            className={`
-              w-full justify-start text-left font-normal rounded-xl
-            `}
+            className="w-full justify-start rounded-lg border-slate-200 text-left font-normal text-foreground hover:bg-slate-50"
           >
             Cancelar
           </Button>
@@ -582,9 +579,7 @@ export default function TransactionModal({
           <Button
             type="submit"
             variant="default"
-            className={`
-              w-full justify-start text-left font-normal rounded-xl
-            `}
+            className="w-full justify-start rounded-lg border-0 bg-[#0B1829] text-left font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40"
           >
             Guardar
           </Button>
@@ -592,7 +587,7 @@ export default function TransactionModal({
 
       </div>
     </form>
-      </div >
-    </div >
+      </div>
+    </Modal>
   );
 }

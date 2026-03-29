@@ -35,7 +35,7 @@ export default function AccountTable({
       key: "isCredit",
       header: "Crédito",
       render: (account) => (
-        <p className={account.isCredit ? "text-emerald-700 font-semibold" : "text-slate-500"}>
+        <p className={account.isCredit ? "text-accent font-semibold" : "text-muted-foreground"}>
           {account.isCredit ? "Sí" : "No"}
         </p>
       ),

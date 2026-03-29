@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import { format, parse } from "date-fns";
+import { ClipboardList } from "lucide-react";
+import { Button } from "@/components/ui/shadcn-button";
+import Modal from "@/components/Modal/Modal";
+import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
+import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
 import type { Debt, CreateDebtDto, RecurrenceType } from "../types/debt.types";
 import type { Account } from "@/features/transactions/types/catalog.types";
@@ -34,7 +37,7 @@ export default function DebtFormModal({
   const [name, setName] = useState("");
   const [payee, setPayee] = useState("");
   const [accountId, setAccountId] = useState<string>("");
-  const [totalAmount, setTotalAmount] = useState<string>("");
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
@@ -46,7 +49,7 @@ export default function DebtFormModal({
       setName(editData.name);
       setPayee(editData.payee);
       setAccountId(editData.accountId ?? defaultAccountId ?? "");
-      setTotalAmount(String(editData.totalAmount));
+      setTotalAmount(Number(editData.totalAmount));
       setDueDate(formatDateForInput(editData.dueDate));
       setNotes(editData.notes ?? "");
       setIsRecurring(editData.isRecurring ?? false);
@@ -56,7 +59,7 @@ export default function DebtFormModal({
       setName("");
       setPayee("");
       setAccountId(defaultAccountId ?? "");
-      setTotalAmount("");
+      setTotalAmount(null);
       setDueDate("");
       setNotes("");
       setIsRecurring(false);
@@ -65,18 +68,16 @@ export default function DebtFormModal({
     }
   }, [editData, open, defaultAccountId]);
 
-  if (!open) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const num = parseFloat(totalAmount.replace(/,/g, "."));
-    if (Number.isNaN(num) || num <= 0) return;
+    if (!dueDate) return;
+    if (totalAmount == null || totalAmount <= 0) return;
     if (!accountId) return;
     const success = await onSubmit({
       name,
       payee,
       accountId,
-      totalAmount: num,
+      totalAmount,
       dueDate,
       notes: notes.trim() || undefined,
       isRecurring,
@@ -87,52 +88,50 @@ export default function DebtFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Guardando…</span>
-        </div>
-      )}
-      <div className="w-full max-w-md animate-scaleIn rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="mb-4 flex w-full justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 transition hover:bg-red-100"
-            title="Cerrar"
-          >
-            <XMarkIcon className="h-5 w-5 text-red-600" />
-          </button>
-        </div>
-        <SavvyBannerLight
-          title={editData ? "Editar obligación" : "Nueva obligación"}
-          subtitle="Registra deudas o compromisos por pagar"
-        />
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={editData ? "Editar obligación" : "Nueva obligación"}
+      description="Registra deudas o compromisos por pagar"
+      className="max-w-lg"
+      headerIcon={
+        <ClipboardList className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Guardando…</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Nombre de la deuda o pago
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-              placeholder="Ej. Tarjeta de crédito"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+              placeholder="Tarjeta de crédito"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               A quién se le debe pagar
             </label>
             <input
               type="text"
               value={payee}
               onChange={(e) => setPayee(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-              placeholder="Ej. Banco X"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+              placeholder="Banco "
               required
             />
           </div>
@@ -150,43 +149,37 @@ export default function DebtFormModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Monto total
             </label>
-            <input
-              type="text"
-              inputMode="decimal"
+            <CurrencyField
               value={totalAmount}
-              onChange={(e) => setTotalAmount(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              onChange={setTotalAmount}
               placeholder="0"
-              required
+              disabled={loading}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Fecha límite de pago
-            </label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-              required
-            />
-          </div>
+          <SavvyDatePicker
+            label="Fecha límite de pago"
+            value={dueDate ? parse(dueDate, "yyyy-MM-dd", new Date()) : null}
+            onChange={(date) =>
+              setDueDate(date ? format(date, "yyyy-MM-dd") : "")
+            }
+            placeholder="Seleccionar fecha límite"
+            required
+          />
           <div>
             <label className="flex cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
                 checked={isRecurring}
                 onChange={(e) => setIsRecurring(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 accent-emerald-600"
+                className="h-4 w-4 rounded border-border accent-emerald-600"
               />
-              <span className="text-sm font-medium text-gray-700">Pago recurrente</span>
+              <span className="text-sm font-medium text-foreground">Pago recurrente</span>
             </label>
             {isRecurring && (
-              <div className="mt-3 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="mt-3 space-y-3 rounded-xl border border-accent/90 bg-accent/40 p-3">
                 <div className="flex gap-4">
                   <label className="flex cursor-pointer items-center gap-2">
                     <input
@@ -197,7 +190,7 @@ export default function DebtFormModal({
                       onChange={() => { setRecurrenceType("monthly"); setRecurrenceDay(1); }}
                       className="accent-emerald-600"
                     />
-                    <span className="text-sm text-gray-700">Cada mes</span>
+                    <span className="text-sm text-foreground">Cada mes</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
                     <input
@@ -208,63 +201,54 @@ export default function DebtFormModal({
                       onChange={() => { setRecurrenceType("biweekly"); setRecurrenceDay(1); }}
                       className="accent-emerald-600"
                     />
-                    <span className="text-sm text-gray-700">Cada dos semanas</span>
+                    <span className="text-sm text-foreground">Cada dos semanas</span>
                   </label>
                 </div>
                 {recurrenceType === "monthly" && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-600">
-                      Día del mes
-                    </label>
-                    <select
-                      value={recurrenceDay}
-                      onChange={(e) => setRecurrenceDay(Number(e.target.value))}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>
-                          Día {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SavvySelect
+                    label="Día del mes"
+                    value={String(recurrenceDay)}
+                    onChange={(v) => setRecurrenceDay(Number(v))}
+                    placeholder="Selecciona el día"
+                    options={Array.from({ length: 31 }, (_, i) => {
+                      const d = i + 1;
+                      return { label: `Día ${d}`, value: String(d) };
+                    })}
+                  />
                 )}
                 {recurrenceType === "biweekly" && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-600">
-                      Día de la semana
-                    </label>
-                    <select
-                      value={recurrenceDay}
-                      onChange={(e) => setRecurrenceDay(Number(e.target.value))}
-                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-                    >
-                      <option value={1}>Lunes</option>
-                      <option value={2}>Martes</option>
-                      <option value={3}>Miércoles</option>
-                      <option value={4}>Jueves</option>
-                      <option value={5}>Viernes</option>
-                      <option value={6}>Sábado</option>
-                      <option value={7}>Domingo</option>
-                    </select>
-                  </div>
+                  <SavvySelect
+                    label="Día de la semana"
+                    value={String(recurrenceDay)}
+                    onChange={(v) => setRecurrenceDay(Number(v))}
+                    placeholder="Selecciona el día"
+                    options={[
+                      { label: "Lunes", value: "1" },
+                      { label: "Martes", value: "2" },
+                      { label: "Miércoles", value: "3" },
+                      { label: "Jueves", value: "4" },
+                      { label: "Viernes", value: "5" },
+                      { label: "Sábado", value: "6" },
+                      { label: "Domingo", value: "7" },
+                    ]}
+                  />
                 )}
               </div>
             )}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Notas (opcional)
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full resize-none rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               rows={2}
               placeholder="Notas adicionales"
             />
           </div>
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">
               Cancelar
             </Button>
@@ -274,6 +258,6 @@ export default function DebtFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

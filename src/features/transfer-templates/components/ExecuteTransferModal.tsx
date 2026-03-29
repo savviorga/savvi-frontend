@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import Modal from "@/components/Modal/Modal";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferTemplate } from "../types/transfer.types";
@@ -58,14 +58,14 @@ export default function ExecuteTransferModal({
     >
       {!template ? null : (
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200/70 bg-slate-50/40 p-3">
-            <p className="text-sm text-slate-600">
+          <div className="rounded-xl border border-border/70 bg-muted/40 p-3">
+            <p className="text-sm text-muted-foreground">
               Monto sugerido:{" "}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-foreground">
                 {initialAmount == null ? "-" : formatMoney(Number(initialAmount))}
               </span>
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Próxima fecha:{" "}
               {format(new Date(template.nextDueDate), "d MMM yyyy", {
                 locale: es,
@@ -74,7 +74,7 @@ export default function ExecuteTransferModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               Monto a pagar
             </label>
             <CurrencyField
@@ -84,7 +84,7 @@ export default function ExecuteTransferModal({
             />
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button
               variant="outline"
               onClick={onClose}

@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import SavvyBanner from "@/components/Banner/SavvyBanner";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import SavvyBannerHome, {
+  type SavvyBannerHomeStat,
+} from "@/components/Banner/SavvyBannerHome";
+import CustomTable, { type Column } from "@/components/Table/CustomTable";
+import { Button } from "@/components/ui/shadcn-button";
+import { cn } from "@/lib/utils";
 import { usePaymentPlanner } from "@/features/payment-planner/hooks/usePaymentPlanner";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useCategories } from "@/features/categories/hooks/useCategories";
-import SavvySelect from "@/components/Select/Select";
 import DebtFormModal from "@/features/payment-planner/components/DebtFormModal";
 import RegisterPaymentModal from "@/features/payment-planner/components/RegisterPaymentModal";
-import DebtCard from "@/features/payment-planner/components/DebtCard";
-import type { Debt, CreateDebtDto } from "@/features/payment-planner/types/debt.types";
-import { format } from "date-fns";
+import type {
+  Debt,
+  CreateDebtDto,
+} from "@/features/payment-planner/types/debt.types";
+import { differenceInCalendarDays, format, parse, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
+import { ProgressBar } from "@/components/ProgressBar";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -22,23 +28,72 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+/** Ventana en días para la barra de avance al vencimiento (deudas recurrentes / resto). */
+function debtPeriodDays(d: Debt): number {
+  if (d.isRecurring && d.recurrenceType === "biweekly") return 14;
+  if (d.isRecurring && d.recurrenceType === "monthly") return 30;
+  return 30;
+}
+
+function getDebtDueProgressInfo(d: Debt) {
+  const due = startOfDay(parse(d.dueDate, "yyyy-MM-dd", new Date()));
+  const today = startOfDay(new Date());
+  const daysUntil = differenceInCalendarDays(due, today);
+  const periodDays = debtPeriodDays(d);
+
+  let progressPercent: number;
+  if (daysUntil <= 0) {
+    progressPercent = 100;
+  } else {
+    progressPercent = Math.min(
+      100,
+      Math.max(0, (1 - daysUntil / periodDays) * 100),
+    );
+  }
+
+  let label: string;
+  if (daysUntil < 0) {
+    const n = Math.abs(daysUntil);
+    label = n === 1 ? "Venció hace 1 día" : `Venció hace ${n} días`;
+  } else if (daysUntil === 0) {
+    label = "Vence hoy";
+  } else if (daysUntil === 1) {
+    label = "Falta 1 día";
+  } else {
+    label = `Faltan ${daysUntil} días`;
+  }
+
+  return { daysUntil, progressPercent, label };
+}
+
+function dueProgressVariant(daysUntil: number) {
+  if (daysUntil < 0) return "red" as const;
+  if (daysUntil === 3) return "red" as const;
+  if (daysUntil <= 5) return "orange" as const;
+  return "teal" as const;
+}
+
+type TabId = "obligations" | "paid" | "history";
+
+type PaymentHistoryRow = {
+  id: string;
+  debtName: string;
+  amount: number;
+  paidAt: string;
+};
+
 export default function PlanificadorPage() {
+  const [tab, setTab] = useState<TabId>("obligations");
   const [formOpen, setFormOpen] = useState(false);
   const [editDebt, setEditDebt] = useState<Debt | null>(null);
-  const [registerPaymentDebt, setRegisterPaymentDebt] = useState<Debt | null>(null);
+  const [registerPaymentDebt, setRegisterPaymentDebt] = useState<Debt | null>(
+    null,
+  );
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] =
     useState<string>("");
 
-  const {
-    debts,
-    totalPaid,
-    loading,
-    create,
-    update,
-    remove,
-    registerPayment,
-    reload,
-  } = usePaymentPlanner();
+  const { debts, totalPaid, loading, create, update, remove, registerPayment } =
+    usePaymentPlanner();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
 
@@ -52,7 +107,73 @@ export default function PlanificadorPage() {
   const paidDebts = debts.filter((d) => d.status === "paid");
   const totalPending = pendingDebts.reduce(
     (sum, d) => sum + Number(d.remainingAmount),
-    0
+    0,
+  );
+
+  /** Solo pendientes — pestaña Obligaciones */
+  const sortedPendingDebts = useMemo(() => {
+    return debts
+      .filter((d) => d.status === "pending")
+      .sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      );
+  }, [debts]);
+
+  /** Solo pagadas — pestaña Pagadas */
+  const sortedPaidDebts = useMemo(() => {
+    return debts
+      .filter((d) => d.status === "paid")
+      .sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      );
+  }, [debts]);
+
+  const paymentHistoryRows = useMemo(() => {
+    const rows: PaymentHistoryRow[] = [];
+    for (const d of debts) {
+      for (const p of d.payments ?? []) {
+        rows.push({
+          id: p.id,
+          debtName: d.name,
+          amount: Number(p.amount),
+          paidAt: p.paidAt,
+        });
+      }
+    }
+    rows.sort(
+      (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime(),
+    );
+    return rows;
+  }, [debts]);
+
+  const plannerBannerStats: SavvyBannerHomeStat[] = useMemo(
+    () => [
+      {
+        label: "Pendiente por pagar",
+        value: formatMoney(totalPending),
+        hint: `${pendingDebts.length} obligación(es)`,
+        valueTone: "rose",
+      },
+      {
+        label: "Total pagado",
+        value: formatMoney(totalPaid),
+        hint: "Historial acumulado",
+        valueTone: "mint",
+      },
+      {
+        label: "Obligaciones",
+        value: String(debts.length),
+        hint: `${pendingDebts.length} pendientes, ${paidDebts.length} pagadas`,
+        valueTone: "navy",
+      },
+    ],
+    [
+      totalPending,
+      pendingDebts.length,
+      totalPaid,
+      debts.length,
+      paidDebts.length,
+    ],
   );
 
   const handleSubmitDebt = async (payload: CreateDebtDto) => {
@@ -62,144 +183,290 @@ export default function PlanificadorPage() {
     return create(payload);
   };
 
-  const handleDelete = async (debt: Debt) => {
-    if (!confirm(`¿Eliminar "${debt.name}"?`)) return;
-    await remove(debt.id);
-  };
+  const handleDelete = useCallback(
+    async (debt: Debt) => {
+      if (!confirm(`¿Eliminar "${debt.name}"?`)) return;
+      await remove(debt.id);
+    },
+    [remove],
+  );
 
-  if (loading && debts.length === 0) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <p className="text-slate-500">Cargando planificador…</p>
-      </div>
-    );
-  }
+  const debtColumns: Column<Debt>[] = [
+    {
+      key: "name",
+      header: "Obligación",
+      render: (d) => (
+        <span className="font-medium text-foreground">{d.name}</span>
+      ),
+    },
+    {
+      key: "payee",
+      header: "Beneficiario",
+      render: (d) => <span className="text-muted-foreground">{d.payee}</span>,
+    },
+    {
+      key: "totalAmount",
+      header: "Total",
+      className: "text-right",
+      render: (d) => (
+        <span className="tabular-nums">
+          {formatMoney(Number(d.totalAmount))}
+        </span>
+      ),
+    },
+    {
+      key: "remainingAmount",
+      header: "Pendiente",
+      className: "text-right",
+      render: (d) => (
+        <span
+          className={`tabular-nums font-medium ${
+            d.status === "paid" ? "text-[#00C49A]" : "text-rose-600"
+          }`}
+        >
+          {formatMoney(Number(d.remainingAmount))}
+        </span>
+      ),
+    },
+    {
+      key: "dueDate",
+      header: "Vencimiento",
+      render: (d) => (
+        <span className="text-muted-foreground">
+          {format(new Date(d.dueDate), "d MMM yyyy", { locale: es })}
+        </span>
+      ),
+    },
+    {
+      key: "dueProgress",
+      header: "Hasta el vencimiento",
+      render: (d) => {
+        if (d.status === "paid") {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        const { progressPercent, label, daysUntil } = getDebtDueProgressInfo(d);
+        return (
+          <div className="min-w-[160px] max-w-[220px]">
+            <ProgressBar
+              label={label}
+              value={progressPercent}
+              variant={dueProgressVariant(daysUntil)}
+            />
+          </div>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Estado",
+      render: (d) =>
+        d.status === "paid" ? (
+          <span className="inline-flex rounded-full bg-[#00C49A]/15 px-2.5 py-0.5 text-xs font-medium text-[#0B1829]">
+            Pagada
+          </span>
+        ) : (
+          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+            Pendiente
+          </span>
+        ),
+    },
+    {
+      key: "actions",
+      header: "Acciones",
+      className: "text-right",
+      render: (d) => {
+        const isPaid = d.status === "paid";
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            {!isPaid && (
+              <button
+                type="button"
+                onClick={() => setRegisterPaymentDebt(d)}
+                className="rounded-lg bg-[#0B1829] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#0B1829]/90"
+              >
+                Registrar pago
+              </button>
+            )}
+            {!isPaid && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDebt(d);
+                  setFormOpen(true);
+                }}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+              >
+                Editar
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleDelete(d)}
+              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+            >
+              Eliminar
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const historyColumns: Column<PaymentHistoryRow>[] = [
+    {
+      key: "debtName",
+      header: "Obligación",
+      render: (row) => (
+        <span className="font-medium text-foreground">{row.debtName}</span>
+      ),
+    },
+    {
+      key: "amount",
+      header: "Monto",
+      className: "text-right",
+      render: (row) => (
+        <span className="tabular-nums font-semibold text-[#00C49A]">
+          {formatMoney(row.amount)}
+        </span>
+      ),
+    },
+    {
+      key: "paidAt",
+      header: "Fecha",
+      className: "text-right",
+      render: (row) => (
+        <span className="text-muted-foreground">
+          {format(new Date(row.paidAt), "d MMM yyyy", { locale: es })}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <>
-      <SavvyBanner
+      <SavvyBannerHome
         title="Mis deudas"
         subtitle="Organiza tus obligaciones y registra pagos. Al registrar un pago, se crea automáticamente una transacción de gasto."
+        badgeLabel="Planificador"
+        stats={plannerBannerStats}
       />
 
-      {/* Resumen */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-lg shadow-slate-200/30">
-          <p className="text-sm font-medium text-slate-500">Pendiente por pagar</p>
-          <p className="mt-1 text-2xl font-bold text-rose-600">
-            {formatMoney(totalPending)}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {pendingDebts.length} obligación(es)
-          </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-lg shadow-slate-200/30">
-          <p className="text-sm font-medium text-slate-500">Total pagado</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-600">
-            {formatMoney(totalPaid)}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">Historial de pagos</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-lg shadow-slate-200/30">
-          <p className="text-sm font-medium text-slate-500">Obligaciones</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{debts.length}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {pendingDebts.length} pendientes, {paidDebts.length} pagadas
-          </p>
-        </div>
-      </div>
-
-      <div className="flex justify-end mb-4">
+      <div className="mb-4 flex justify-end">
         <Button
           onClick={() => {
             setEditDebt(null);
             setFormOpen(true);
           }}
           variant="default"
-          className="rounded-xl"
+          className="rounded-xl bg-[#0B1829] text-white hover:bg-[#0B1829]/90"
         >
           + Nueva obligación
         </Button>
       </div>
 
-      {/* Lista de pendientes */}
-      <section className="mb-8">
-        <h2 className="mb-4 text-lg font-semibold text-slate-800">
-          Pendientes por pagar
-        </h2>
-        {pendingDebts.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-slate-500">
-            No hay obligaciones pendientes. Añade una para organizar tus pagos.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {pendingDebts.map((debt) => (
-              <DebtCard
-                key={debt.id}
-                debt={debt}
-                onRegisterPayment={setRegisterPaymentDebt}
-                onEdit={(d) => {
-                  setEditDebt(d);
-                  setFormOpen(true);
-                }}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Lista de pagadas */}
-      {paidDebts.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold text-slate-800">
+      <div className="mb-4">
+        <div
+          role="tablist"
+          aria-label="Vistas del planificador"
+          className="flex gap-1 border-b border-border"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "obligations"}
+            id="tab-obligations"
+            onClick={() => setTab("obligations")}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              tab === "obligations"
+                ? "border-[#00C49A] text-[#0B1829]"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Obligaciones
+            {pendingDebts.length > 0 && (
+              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {pendingDebts.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "paid"}
+            id="tab-paid"
+            onClick={() => setTab("paid")}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              tab === "paid"
+                ? "border-[#00C49A] text-[#0B1829]"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
             Pagadas
-          </h2>
-          <div className="space-y-4">
-            {paidDebts.map((debt) => (
-              <DebtCard
-                key={debt.id}
-                debt={debt}
-                onRegisterPayment={() => {}}
-                onEdit={(d) => {
-                  setEditDebt(d);
-                  setFormOpen(true);
-                }}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
+            {paidDebts.length > 0 && (
+              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {paidDebts.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "history"}
+            id="tab-history"
+            onClick={() => setTab("history")}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              tab === "history"
+                ? "border-[#00C49A] text-[#0B1829]"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Historial de pagos
+            {paymentHistoryRows.length > 0 && (
+              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {paymentHistoryRows.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {tab === "obligations" && (
+        <section
+          role="tabpanel"
+          aria-labelledby="tab-obligations"
+          className="mb-8"
+        >
+          <CustomTable
+            data={sortedPendingDebts}
+            columns={debtColumns}
+            loading={loading}
+            rowKey={(d) => d.id}
+          />
         </section>
       )}
 
-      {/* Historial de pagos (todas las deudas) */}
-      {debts.some((d) => d.payments && d.payments.length > 0) && (
-        <section>
-          <h2 className="mb-4 text-lg font-semibold text-slate-800">
-            Historial de pagos
-          </h2>
-          <div className="rounded-2xl border border-slate-200/60 bg-white shadow-lg shadow-slate-200/30 overflow-hidden">
-            <ul className="divide-y divide-slate-100">
-              {debts.map((debt) =>
-                (debt.payments ?? []).map((payment) => (
-                  <li
-                    key={payment.id}
-                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
-                  >
-                    <span className="font-medium text-slate-700">{debt.name}</span>
-                    <span className="text-emerald-600">
-                      {formatMoney(Number(payment.amount))}
-                    </span>
-                    <span className="text-slate-500">
-                      {format(new Date(payment.paidAt), "d MMM yyyy", {
-                        locale: es,
-                      })}
-                    </span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
+      {tab === "paid" && (
+        <section role="tabpanel" aria-labelledby="tab-paid" className="mb-8">
+          <CustomTable
+            data={sortedPaidDebts}
+            columns={debtColumns}
+            loading={loading}
+            rowKey={(d) => d.id}
+          />
+        </section>
+      )}
+
+      {tab === "history" && (
+        <section role="tabpanel" aria-labelledby="tab-history" className="mb-8">
+          <CustomTable
+            data={paymentHistoryRows}
+            columns={historyColumns}
+            loading={loading}
+            rowKey={(row) => row.id}
+          />
         </section>
       )}
 
@@ -222,7 +489,9 @@ export default function PlanificadorPage() {
         debt={registerPaymentDebt}
         accounts={accounts}
         categories={categories}
-        defaultAccountId={registerPaymentDebt?.accountId ?? selectedPaymentAccountId}
+        defaultAccountId={
+          registerPaymentDebt?.accountId ?? selectedPaymentAccountId
+        }
         onSubmit={async (debtId, payload) => {
           const ok = await registerPayment(debtId, payload);
           if (ok) setRegisterPaymentDebt(null);

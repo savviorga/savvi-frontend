@@ -1,7 +1,9 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import Loader from "@/components/Loaders/Loader";
 import Pagination from "@/components/Pagination/Pagination";
+import LinearLoader from "../Loaders/LinearLoader";
 
 export interface Column<T> {
   key: string;
@@ -35,19 +37,18 @@ export default function CustomTable<T>({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-lg shadow-slate-200/50">
-      {/* Gradient accent top border */}
-      <div className="h-[2px] bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500" />
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-white shadow-lg shadow-border/50">
+      <div className="h-[2px] bg-[#00C49A]" aria-hidden />
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           {/* Header */}
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80">
+            <tr className="border-b border-border bg-muted/80">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 ${col.className ?? ""}`}
+                  className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground ${col.className ?? ""}`}
                 >
                   {col.header}
                 </th>
@@ -61,16 +62,7 @@ export default function CustomTable<T>({
             {loading && (
               <tr>
                 <td colSpan={columns.length} className="px-6 py-16 text-center">
-                  <div className="flex flex-col items-center gap-3">
-                    {/* Spinner */}
-                    <div className="relative h-10 w-10">
-                      <div className="absolute inset-0 rounded-full border-[3px] border-slate-200" />
-                      <div className="absolute inset-0 animate-spin rounded-full border-[3px] border-transparent border-t-emerald-500" />
-                    </div>
-                    <span className="text-sm font-medium text-slate-500">
-                      Cargando información...
-                    </span>
-                  </div>
+                  <LinearLoader />
                 </td>
               </tr>
             )}
@@ -81,9 +73,9 @@ export default function CustomTable<T>({
                 <td colSpan={columns.length} className="px-6 py-16 text-center">
                   <div className="flex flex-col items-center gap-3">
                     {/* Empty icon */}
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
                       <svg
-                        className="h-7 w-7 text-slate-400"
+                        className="h-7 w-7 text-muted-foreground"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -97,10 +89,10 @@ export default function CustomTable<T>({
                       </svg>
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-medium text-slate-600">
+                      <p className="text-sm font-medium text-muted-foreground">
                         No hay registros
                       </p>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Los datos aparecerán aquí cuando estén disponibles
                       </p>
                     </div>
@@ -114,14 +106,14 @@ export default function CustomTable<T>({
               data.map((row, index) => (
                 <tr
                   key={rowKey(row)}
-                  className={`group transition-colors duration-150 hover:bg-emerald-50/50 ${
-                    index % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                  className={`group transition-colors duration-150 hover:bg-accent/10 ${
+                    index % 2 === 0 ? "bg-white" : "bg-muted/30"
                   }`}
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-6 py-4 text-slate-700 ${col.className ?? ""}`}
+                      className={`px-6 py-4 text-foreground ${col.className ?? ""}`}
                     >
                       {col.render(row)}
                     </td>
@@ -134,7 +126,7 @@ export default function CustomTable<T>({
 
       {/* Pagination */}
       {totalPages && totalPages > 1 && (
-        <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-4">
+        <div className="border-t border-border bg-muted/50 px-6 py-4">
           <Pagination
             currentPage={page}
             totalPages={totalPages}

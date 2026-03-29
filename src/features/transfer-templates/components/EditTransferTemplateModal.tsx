@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import Modal from "@/components/Modal/Modal";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import type {
   TransferFrequency,
   TransferTemplate,
@@ -125,25 +125,25 @@ export default function EditTransferTemplateModal({
           ? `Plantilla: ${template.name}`
           : undefined
       }
-      className="max-w-xl max-h-[90vh] overflow-y-auto"
+      className="max-w-xl"
     >
       {!template ? null : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {loading && (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-600" />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-accent" />
               Guardando…
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Cuenta origen
             </label>
             <select
               value={fromAccountId}
               onChange={(e) => setFromAccountId(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               required
             >
               <option value="">Selecciona cuenta</option>
@@ -156,60 +156,60 @@ export default function EditTransferTemplateModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Nombre de la plantilla
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               maxLength={200}
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Destinatario
             </label>
             <input
               type="text"
               value={payeeName}
               onChange={(e) => setPayeeName(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Número de cuenta
             </label>
             <input
               type="text"
               value={payeeAccount}
               onChange={(e) => setPayeeAccount(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               placeholder="Opcional"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Banco
             </label>
             <input
               type="text"
               value={payeeBank}
               onChange={(e) => setPayeeBank(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               placeholder="Opcional"
             />
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700">Frecuencia</p>
+            <p className="mb-2 text-sm font-medium text-foreground">Frecuencia</p>
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -226,8 +226,8 @@ export default function EditTransferTemplateModal({
                   onClick={() => setFrequency(opt.value)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     frequency === opt.value
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-white text-foreground hover:bg-muted"
                   }`}
                 >
                   {opt.label}
@@ -235,9 +235,9 @@ export default function EditTransferTemplateModal({
               ))}
             </div>
             {frequency === "custom" && (
-              <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+              <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-accent/20 bg-accent/10 p-3">
                 <div className="min-w-[5rem] flex-1">
-                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
                     Cada
                   </label>
                   <input
@@ -248,11 +248,11 @@ export default function EditTransferTemplateModal({
                     onChange={(e) =>
                       setCustomIntervalAmount(Number(e.target.value))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
                   />
                 </div>
                 <div className="min-w-[8rem] flex-1">
-                  <label className="mb-1 block text-xs font-medium text-gray-600">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
                     Unidad
                   </label>
                   <select
@@ -260,7 +260,7 @@ export default function EditTransferTemplateModal({
                     onChange={(e) =>
                       setCustomIntervalUnit(e.target.value as IntervalUnit)
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
                   >
                     <option value="days">Día(s)</option>
                     <option value="weeks">Semana(s)</option>
@@ -268,9 +268,9 @@ export default function EditTransferTemplateModal({
                     <option value="years">Año(s) (365 días)</option>
                   </select>
                 </div>
-                <p className="w-full text-xs text-slate-600">
+                <p className="w-full text-xs text-muted-foreground">
                   ≈{" "}
-                  <span className="font-semibold text-emerald-800">
+                  <span className="font-semibold text-accent-foreground">
                     {intervalToDays(customIntervalAmount, customIntervalUnit)} días
                   </span>{" "}
                   entre cada vencimiento
@@ -280,7 +280,7 @@ export default function EditTransferTemplateModal({
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-700">Tipo</p>
+            <p className="mb-2 text-sm font-medium text-foreground">Tipo</p>
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -294,8 +294,8 @@ export default function EditTransferTemplateModal({
                   onClick={() => setRecurrenceType(opt.value)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     recurrenceType === opt.value
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-white text-foreground hover:bg-muted"
                   }`}
                 >
                   {opt.label}
@@ -306,7 +306,7 @@ export default function EditTransferTemplateModal({
 
           {frequency !== "custom" && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 Día del mes (1-28)
               </label>
               <input
@@ -315,7 +315,7 @@ export default function EditTransferTemplateModal({
                 max={28}
                 value={dayOfMonth}
                 onChange={(e) => setDayOfMonth(Number(e.target.value))}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               />
             </div>
           )}

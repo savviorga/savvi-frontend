@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import { useEffect, useState } from "react";
+import { Tag } from "lucide-react";
+import { Button } from "@/components/ui/shadcn-button";
+import Modal from "@/components/Modal/Modal";
 import { Category } from "../types/category.type";
 import { CreateCategoryDto } from "../dto/create-category.dto";
-import type { CategoryType } from "../types/category.type";
 
 interface CreateCategoryProps {
   open: boolean;
@@ -34,35 +33,35 @@ export default function CreateCategory({
   loading = false,
 }: CreateCategoryProps) {
   const [form, setForm] = useState<CreateCategoryDto>(() =>
-    getInitialForm(editData)
+    getInitialForm(editData),
   );
 
-  if (!open) return null;
+  useEffect(() => {
+    if (open) {
+      setForm(getInitialForm(editData));
+    }
+  }, [open, editData]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Cargando…</span>
-        </div>
-      )}
-
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-scaleIn">
-        <div className="flex justify-end w-full mb-4">
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-red-100 rounded-lg transition cursor-pointer"
-            title="Cerrar"
-          >
-            <XMarkIcon className="w-5 h-5 text-red-600" />
-          </button>
-        </div>
-
-        <SavvyBannerLight
-          title={editData ? "Editar categoría" : "Crear categoría"}
-          subtitle="Gestiona aquí tu categoría"
-        />
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={editData ? "Editar categoría" : "Crear categoría"}
+      description="Gestiona aquí tu categoría"
+      className="max-w-md"
+      headerIcon={
+        <Tag className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Cargando…</span>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
@@ -72,54 +71,54 @@ export default function CreateCategory({
           className="space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Nombre
             </label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="mt-1 block w-full rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white"
+              className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50"
               placeholder="Nombre de la categoría"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Tipo de categoría
             </label>
             <div className="mt-1 flex gap-3">
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50 has-[:checked]:ring-2 has-[:checked]:ring-emerald-200">
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 transition has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:checked]:ring-2 has-[:checked]:ring-accent/30">
                 <input
                   type="radio"
                   name="category-type"
                   value="ingreso"
                   checked={form.type === "ingreso"}
                   onChange={() => setForm((f) => ({ ...f, type: "ingreso" }))}
-                  className="border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  className="border-border text-accent focus:ring-accent"
                 />
-                <span className="text-sm font-medium text-gray-700">Ingresos</span>
+                <span className="text-sm font-medium text-foreground">Ingresos</span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 transition has-[:checked]:border-rose-500 has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-rose-200">
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 transition has-[:checked]:border-rose-500 has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-rose-200">
                 <input
                   type="radio"
                   name="category-type"
                   value="egreso"
                   checked={form.type === "egreso"}
                   onChange={() => setForm((f) => ({ ...f, type: "egreso" }))}
-                  className="border-gray-300 text-rose-600 focus:ring-rose-500"
+                  className="border-border text-rose-600 focus:ring-rose-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Gastos</span>
+                <span className="text-sm font-medium text-foreground">Gastos</span>
               </label>
             </div>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Indica si esta categoría se usa para ingresos o para gastos.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Descripción
             </label>
             <textarea
@@ -127,24 +126,24 @@ export default function CreateCategory({
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value || undefined }))
               }
-              className="mt-1 block w-full rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white resize-none"
+              className="mt-1 block w-full resize-none rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50"
               rows={3}
               placeholder="Descripción de la categoría"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Color (hex, ej. #3B82F6)
             </label>
-            <div className="flex gap-2 items-center">
+            <div className="mt-1 flex items-center gap-2">
               <input
                 type="color"
                 value={form.color ?? "#3b82f6"}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, color: e.target.value }))
                 }
-                className="h-10 w-14 rounded-lg border border-gray-200 cursor-pointer"
+                className="h-10 w-14 cursor-pointer rounded-lg border border-border"
               />
               <input
                 type="text"
@@ -152,7 +151,7 @@ export default function CreateCategory({
                 onChange={(e) =>
                   setForm((f) => ({ ...f, color: e.target.value || undefined }))
                 }
-                className="mt-1 block flex-1 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm px-3 py-2"
+                className="block flex-1 rounded-xl border border-border px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                 placeholder="#3B82F6"
               />
             </div>
@@ -166,17 +165,17 @@ export default function CreateCategory({
               onChange={(e) =>
                 setForm((f) => ({ ...f, isActive: e.target.checked }))
               }
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-border text-accent focus:ring-indigo-500"
             />
             <label
               htmlFor="create-category-active"
-              className="text-sm text-gray-700"
+              className="text-sm text-foreground"
             >
               Activa
             </label>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-300">
+          <div className="flex justify-end space-x-3 border-t border-border pt-4">
             <Button
               type="button"
               onClick={onClose}
@@ -191,6 +190,6 @@ export default function CreateCategory({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

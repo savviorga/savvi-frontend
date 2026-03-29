@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import LoginForm from "@/features/auth/components/LoginForm";
+import LoginPageLayout from "@/features/auth/components/LoginPageLayout";
 
 const DEFAULT_REDIRECT = "/transactions";
 
@@ -48,25 +48,16 @@ function LoginPageInner() {
     status === "loading" && !initialCheckDone.current;
   if (showInitialLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
-        <p className="text-gray-500">Comprobando sesión…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#011627] px-4">
+        <p className="text-sm text-slate-400">Comprobando sesión…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-12">
-      <Link
-        href="/"
-        className="text-sm text-gray-500 hover:text-indigo-600 mb-6"
-      >
-        ← Volver al inicio
-      </Link>
+    <LoginPageLayout>
       <LoginForm onSubmit={handleSubmit} loading={loading} />
-      <p className="mt-4 text-center text-sm text-gray-500">
-        Al iniciar sesión serás redirigido automáticamente.
-      </p>
-    </div>
+    </LoginPageLayout>
   );
 }
 
@@ -74,8 +65,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
-          <p className="text-gray-500">Cargando…</p>
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#011627] px-4">
+          <p className="text-sm text-slate-400">Cargando…</p>
         </div>
       }
     >

@@ -5,7 +5,7 @@ import { useCategories } from "@/features/categories/hooks/useCategories";
 import CategoryTable from "@/features/categories/components/CategoryTable";
 import CreateCategory from "@/features/categories/components/CreateCategory";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import { CreateCategoryDto } from "@/features/categories/dto/create-category.dto";
 
 export default function CategoriesPage() {

@@ -21,7 +21,7 @@ export default function TransactionTable({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
       <button className="px-2 py-1 bg-red-400 text-white rounded-md" onClick={() => setOpen(true)}>ver</button>
       <Modal
         open={open}
@@ -34,7 +34,7 @@ export default function TransactionTable({
 
       <table className="w-full text-sm">
         {/* Header */}
-        <thead className="border-b border-gray-200 text-gray-500">
+        <thead className="border-b border-border text-muted-foreground">
           <tr>
             <th className="px-6 py-4 text-left font-medium">Tipo</th>
             <th className="px-6 py-4 text-left font-medium">Transaction ID</th>
@@ -48,25 +48,25 @@ export default function TransactionTable({
         {/* Body */}
         <tbody className="divide-y divide-gray-100">
           {items.map((item) => (
-            <tr key={item.id} className="hover:bg-gray-50 transition">
+            <tr key={item.id} className="hover:bg-background transition">
               {/* Icon */}
               <td className="px-6 py-4" title={item.type}>
                 <FlowIconTransaction type={item.type}/>
               </td>
 
               {/* ID */}
-              <td className="px-6 py-4 text-gray-500">
+              <td className="px-6 py-4 text-muted-foreground">
                 #{item.id.slice(0, 8)}…
               </td>
 
               {/* Description */}
-              <td className="px-6 py-4 font-medium text-gray-900 max-w-xs truncate">
+              <td className="px-6 py-4 font-medium text-foreground max-w-xs truncate">
                 <p title={item.description}>{item.description}</p>
               </td>
 
 
               {/* Date */}
-              <td className="px-6 py-4 text-gray-500">{item.date}</td>
+              <td className="px-6 py-4 text-muted-foreground">{item.date}</td>
 
               {/* Amount */}
               <td
@@ -83,7 +83,7 @@ export default function TransactionTable({
               {/* Receipt */}
               <td className="px-6 py-4 text-right">
                 <button
-                  className="cursor-pointer rounded-full border border-blue-600 px-4 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 transition"
+                  className="cursor-pointer rounded-full border border-accent px-4 py-1.5 text-sm font-medium text-accent hover:bg-accent/10 transition"
                   onClick={() => onShow?.(item.id)}
                 >
                   Ver

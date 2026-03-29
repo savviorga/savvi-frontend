@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useCategories } from "@/features/categories/hooks/useCategories";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import { useBudgets } from "@/features/budgets/hooks/useBudgets";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import type { Category } from "@/features/categories/types/category.type";
 import BudgetTable, {

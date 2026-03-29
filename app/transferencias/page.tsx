@@ -10,8 +10,9 @@ import {
 import { es } from "date-fns/locale";
 import toast from "react-hot-toast";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
+import { ProgressBar } from "@/components/ProgressBar";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/shadcn-button";
 import StatusBadge from "@/components/FeedBack/StatusBadge";
 import ViewModal from "@/features/transactions/components/modals/ViewModal";
 import { FlowIconTransaction } from "@/features/transactions/components/FlowIconTransaction";
@@ -174,8 +175,8 @@ export default function TransferenciasPage() {
       header: "Plantilla",
       render: (t) => (
         <div>
-          <p className="text-xs text-slate-500">{t.name}</p>
-          <p className="font-semibold text-slate-900">{t.payeeName}</p>
+          <p className="text-xs text-muted-foreground">{t.name}</p>
+          <p className="font-semibold text-foreground">{t.payeeName}</p>
         </div>
       ),
     },
@@ -184,7 +185,7 @@ export default function TransferenciasPage() {
       header: "Monto anterior",
       className: "text-right",
       render: (t) => (
-        <span className="font-semibold tabular-nums text-slate-900">
+        <span className="font-semibold tabular-nums text-foreground">
           {t.lastAmount == null ? "—" : formatMoney(Number(t.lastAmount))}
         </span>
       ),
@@ -193,7 +194,7 @@ export default function TransferenciasPage() {
       key: "nextDue",
       header: "Próxima fecha",
       render: (t) => (
-        <span className="font-medium text-slate-800">
+        <span className="font-medium text-foreground">
           {format(new Date(t.nextDueDate), "d MMM yyyy", { locale: es })}
         </span>
       ),
@@ -207,36 +208,17 @@ export default function TransferenciasPage() {
           t.frequency,
           t.customIntervalDays
         );
-        const barTone =
+        const variant =
           daysUntil < 0
-            ? "bg-rose-500"
-            : daysUntil === 0
-              ? "bg-amber-500"
-              : "bg-emerald-500";
+            ? "red"
+            : daysUntil === 3
+              ? "red"
+              : daysUntil <= 5
+                ? "orange"
+                : "teal";
         return (
-          <div className="min-w-[160px] max-w-[220px]">
-            <p
-              className={`mb-1.5 text-xs font-semibold ${
-                daysUntil < 0
-                  ? "text-rose-600"
-                  : daysUntil === 0
-                    ? "text-amber-700"
-                    : "text-emerald-700"
-              }`}
-            >
-              {label}
-            </p>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200/90">
-              <div
-                className={`h-full rounded-full transition-[width] duration-500 ease-out ${barTone}`}
-                style={{ width: `${progressPercent}%` }}
-                role="progressbar"
-                aria-valuenow={Math.round(progressPercent)}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={label}
-              />
-            </div>
+          <div className="min-w-[180px] max-w-[240px]">
+            <ProgressBar label={label} value={progressPercent} variant={variant} />
           </div>
         );
       },
@@ -245,7 +227,7 @@ export default function TransferenciasPage() {
       key: "frequency",
       header: "Frecuencia",
       render: (t) => (
-        <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
+        <span className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold  ring-1 ring-emerald-600/20">
           {frequencyBadgeLabel(t)}
         </span>
       ),
@@ -265,7 +247,7 @@ export default function TransferenciasPage() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-slate-400 hover:bg-emerald-50 hover:text-emerald-700"
+            className="text-muted-foreground hover:bg-accent/10 hover:text-accent"
             disabled={!t.isActive}
             title={
               t.isActive
@@ -284,7 +266,7 @@ export default function TransferenciasPage() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-slate-400 hover:bg-slate-100 hover:text-slate-800"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground"
             title="Editar plantilla"
             aria-label="Editar plantilla"
             onClick={() => {
@@ -300,8 +282,8 @@ export default function TransferenciasPage() {
             size="icon-sm"
             className={
               t.isActive
-                ? "text-slate-400 hover:bg-amber-50 hover:text-amber-700"
-                : "text-slate-400 hover:bg-emerald-50 hover:text-emerald-700"
+                ? "text-muted-foreground hover:bg-amber-50 hover:text-amber-700"
+                : "text-muted-foreground hover:bg-accent/10 hover:text-accent"
             }
             title={t.isActive ? "Desactivar" : "Activar"}
             aria-label={t.isActive ? "Desactivar" : "Activar"}
@@ -328,7 +310,7 @@ export default function TransferenciasPage() {
       key: "date",
       header: "Fecha",
       render: (item) => (
-        <span className="text-gray-500">{item.date}</span>
+        <span className="text-muted-foreground">{item.date}</span>
       ),
     },
     {
@@ -336,7 +318,7 @@ export default function TransferenciasPage() {
       header: "Descripción",
       render: (item) => (
         <p
-          className="max-w-xs truncate font-medium text-gray-900"
+          className="max-w-xs truncate font-medium text-foreground"
           title={item.description}
         >
           {item.description}
@@ -367,7 +349,7 @@ export default function TransferenciasPage() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted"
           title="Ver detalle"
           aria-label="Ver detalle"
           onClick={() => {
@@ -389,20 +371,20 @@ export default function TransferenciasPage() {
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted-foreground">
           {tab === "active"
             ? "Plantillas guardadas y su próximo vencimiento."
             : "Movimientos generados desde tus plantillas de transferencia."}
         </p>
 
-        <div className="flex w-full shrink-0 gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 sm:w-auto">
+        <div className="flex w-full shrink-0 gap-1 rounded-xl border border-border/80 bg-muted/80 p-1 sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
-            className={`rounded-lg gap-1.5 px-2.5 text-slate-600 ${
+            className={`rounded-lg gap-1.5 px-2.5 text-muted-foreground ${
               tab === "active"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             }`}
             onClick={() => setTab("active")}
             title="Plantillas"
@@ -413,10 +395,10 @@ export default function TransferenciasPage() {
           <Button
             variant="ghost"
             size="sm"
-            className={`rounded-lg gap-1.5 px-2.5 text-slate-600 ${
+            className={`rounded-lg gap-1.5 px-2.5 text-muted-foreground ${
               tab === "history"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             }`}
             onClick={() => setTab("history")}
             title="Historial"

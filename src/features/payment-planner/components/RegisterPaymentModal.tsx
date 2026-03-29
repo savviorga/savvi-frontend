@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import { Banknote } from "lucide-react";
+import { Button } from "@/components/ui/shadcn-button";
+import Modal from "@/components/Modal/Modal";
 import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
@@ -59,7 +59,7 @@ export default function RegisterPaymentModal({
     }
   }, [open, debt, defaultAccountId]);
 
-  if (!open || !debt) return null;
+  if (!debt) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,33 +79,32 @@ export default function RegisterPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Registrando pago…</span>
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="Registrar pago"
+      description="Mismo flujo que un gasto: se crea la transacción de egreso y se descuenta del pendiente"
+      className="max-w-lg"
+      headerIcon={
+        <Banknote className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Registrando pago…</span>
+          </div>
+        )}
+
+        <div className="mb-4 rounded-xl border border-rose-100 bg-rose-50 p-3 text-sm">
+          <p className="font-medium text-foreground">{debt.name}</p>
+          <p className="text-muted-foreground">Pendiente: {formatMoney(remaining)}</p>
         </div>
-      )}
-      <div className="w-full max-w-md animate-scaleIn rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="mb-4 flex w-full justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 transition hover:bg-red-100"
-            title="Cerrar"
-          >
-            <XMarkIcon className="h-5 w-5 text-red-600" />
-          </button>
-        </div>
-        <SavvyBannerLight
-          title="Registrar pago"
-          subtitle="Mismo flujo que un gasto: se crea la transacción de egreso y se descuenta del pendiente"
-        />
-        <div className="mt-2 rounded-xl bg-rose-50 p-3 text-sm border border-rose-100">
-          <p className="font-medium text-slate-700">{debt.name}</p>
-          <p className="text-slate-500">Pendiente: {formatMoney(remaining)}</p>
-        </div>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <SavvyDatePicker
@@ -115,14 +114,14 @@ export default function RegisterPaymentModal({
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 Monto
               </label>
               <CurrencyField
                 value={amount}
                 onChange={setAmount}
               />
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Máximo {formatMoney(remaining)}
               </p>
             </div>
@@ -149,18 +148,18 @@ export default function RegisterPaymentModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Descripción
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+              className="mt-1 block w-full resize-none rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
               rows={2}
               placeholder="Ej. Pago mes marzo"
             />
           </div>
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">
               Cancelar
             </Button>
@@ -170,6 +169,6 @@ export default function RegisterPaymentModal({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

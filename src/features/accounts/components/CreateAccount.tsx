@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import SavvyBannerLight from "@/components/Banner/SavvyBannerLight";
+import { useEffect, useState } from "react";
+import { Wallet } from "lucide-react";
+import { Button } from "@/components/ui/shadcn-button";
+import Modal from "@/components/Modal/Modal";
 import { Account, CreateAccountDto } from "../types/account.type";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 
@@ -46,35 +46,33 @@ export default function CreateAccount({
     return Number.isFinite(n) ? n : undefined;
   };
 
-  if (!open) return null;
+  useEffect(() => {
+    if (open) {
+      setForm(getInitialForm(editData));
+    }
+  }, [open, editData]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-sm">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <span className="text-sm text-gray-600">Cargando…</span>
-        </div>
-      )}
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={editData ? "Editar cuenta" : "Crear cuenta"}
+      description="Gestiona aquí tu cuenta"
+      className="max-w-lg"
+      headerIcon={
+        <Wallet className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
+      }
+    >
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+            <span className="text-sm text-muted-foreground">Cargando…</span>
+          </div>
+        )}
 
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-scaleIn">
-        {/* Botón cerrar */}
-        <div className="flex justify-end w-full mb-4">
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-red-100 rounded-lg transition cursor-pointer"
-            title="Cerrar"
-          >
-            <XMarkIcon className="w-5 h-5 text-red-600" />
-          </button>
-        </div>
-
-        <SavvyBannerLight
-          title={editData ? "Editar cuenta" : "Crear cuenta"}
-          subtitle="Gestiona aquí tu cuenta"
-        />
-
-        {/* Formulario */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -82,23 +80,21 @@ export default function CreateAccount({
           }}
           className="space-y-4"
         >
-          {/* Nombre */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Nombre
             </label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="mt-1 block w-full rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white"
+              className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50"
               placeholder="Nombre de la cuenta"
-              
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Saldo inicial (COP)
             </label>
             <CurrencyField
@@ -109,12 +105,12 @@ export default function CreateAccount({
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-3 py-2">
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-800">
+              <span className="text-sm font-medium text-foreground">
                 Cuenta de crédito
               </span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 Activa esta opción si es tarjeta/TC u otra cuenta de crédito.
               </span>
             </div>
@@ -124,15 +120,14 @@ export default function CreateAccount({
               onChange={(e) =>
                 setForm((f: any) => ({ ...f, isCredit: e.target.checked }))
               }
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-200"
+              className="h-4 w-4 rounded border-border text-accent focus:ring-accent/25"
             />
           </div>
 
-          {/* Campos extra para tarjeta de crédito */}
           {form.isCredit && (
-            <div className="space-y-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+            <div className="space-y-4 rounded-2xl border border-indigo-200 bg-accent/10 p-4">
               <div>
-                <label className="block text-sm font-medium text-gray-800 mb-1">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   Límite de crédito (COP)
                 </label>
                 <CurrencyField
@@ -149,7 +144,7 @@ export default function CreateAccount({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     APR (%) anual
                   </label>
                   <input
@@ -162,13 +157,13 @@ export default function CreateAccount({
                         aprRate: toOptionalNumber(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                     placeholder="Ej. 35.5"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Periodo de gracia (días)
                   </label>
                   <input
@@ -181,7 +176,7 @@ export default function CreateAccount({
                         gracePeriodDays: toOptionalNumber(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                     placeholder="Ej. 20"
                   />
                 </div>
@@ -189,7 +184,7 @@ export default function CreateAccount({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Día de corte (1-31)
                   </label>
                   <input
@@ -202,13 +197,13 @@ export default function CreateAccount({
                         statementDay: toOptionalNumber(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                     placeholder="Opcional"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Día de pago (1-31)
                   </label>
                   <input
@@ -221,7 +216,7 @@ export default function CreateAccount({
                         dueDay: toOptionalNumber(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                     placeholder="Opcional"
                   />
                 </div>
@@ -229,7 +224,7 @@ export default function CreateAccount({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Pago mínimo (%)
                   </label>
                   <input
@@ -242,13 +237,13 @@ export default function CreateAccount({
                         minPaymentPercent: toOptionalNumber(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/25"
                     placeholder="Opcional"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-foreground">
                     Pago mínimo (monto, COP)
                   </label>
                   <CurrencyField
@@ -264,15 +259,14 @@ export default function CreateAccount({
                 </div>
               </div>
 
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-muted-foreground">
                 Estos datos se usarán luego para calcular intereses y proyecciones.
               </p>
             </div>
           )}
 
-          {/* Descripción */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Descripción
             </label>
             <textarea
@@ -280,14 +274,13 @@ export default function CreateAccount({
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
-              className="mt-1 block w-full rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder-gray-400 bg-white resize-none"
+              className="mt-1 block w-full resize-none rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50"
               rows={3}
               placeholder="Descripción de la cuenta"
             />
           </div>
 
-          {/* Botones */}
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-300">
+          <div className="flex justify-end space-x-3 border-t border-border pt-4">
             <Button
               type="button"
               onClick={onClose}
@@ -303,6 +296,6 @@ export default function CreateAccount({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

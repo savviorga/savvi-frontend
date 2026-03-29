@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
-import Modal from "@/components/Modal/Modal";
 import { Transaction } from "../../types/transactions.types";
 import { FlowIconTransaction } from "../FlowIconTransaction";
 
@@ -20,7 +19,6 @@ export default function TransactionTable({
   onShow,
 }: TransactionTableProps) {
   const [page, setPage] = useState(1);
-  const [open, setOpen] = useState(false);
 
   const columns: Column<Transaction>[] = [
     {
@@ -32,7 +30,7 @@ export default function TransactionTable({
       key: "date",
       header: "Fecha",
       render: (item) => (
-        <span className="text-gray-500">{item.date}</span>
+        <span className="text-muted-foreground">{item.date}</span>
       ),
     },
     {
@@ -40,7 +38,7 @@ export default function TransactionTable({
       header: "Descripción",
       render: (item) => (
         <p
-          className="max-w-xs truncate font-medium text-gray-900"
+          className="max-w-xs truncate font-medium text-foreground"
           title={item.description}
         >
           {item.description}
@@ -73,7 +71,8 @@ export default function TransactionTable({
       className: "text-right",
       render: (item) => (
         <button
-          className="rounded-full border border-blue-600 px-4 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-50"
+          type="button"
+          className="rounded-full border border-accent px-4 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/10"
           onClick={() => onShow?.(item.id)}
         >
           Ver
@@ -84,23 +83,6 @@ export default function TransactionTable({
 
   return (
     <div className="space-y-4">
-      {/* Modal trigger */}
-      <button
-        className="rounded-md bg-red-400 px-2 py-1 text-white"
-        onClick={() => setOpen(true)}
-      >
-        Ver
-      </button>
-
-      <Modal
-        open={open}
-        onOpenChange={setOpen}
-        title="Crear transacción"
-      >
-        <p>lorem</p>
-      </Modal>
-
-      {/* Table */}
       <CustomTable
         data={items}
         columns={columns}

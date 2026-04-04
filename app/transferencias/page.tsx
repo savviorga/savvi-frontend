@@ -12,25 +12,21 @@ import toast from "react-hot-toast";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import { ProgressBar } from "@/components/ProgressBar";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
+import PlannerTabs from "@/components/Tabs/PlannerTabs";
 import { Button } from "@/components/ui/shadcn-button";
 import StatusBadge from "@/components/FeedBack/StatusBadge";
-import ViewModal from "@/features/transactions/components/modals/ViewModal";
-import { FlowIconTransaction } from "@/features/transactions/components/FlowIconTransaction";
+import ReportTransferTemplate from "@/features/transfer-templates/components/ReportTransferTemplate";
 import ExecuteTransferModal from "@/features/transfer-templates/components/ExecuteTransferModal";
 import EditTransferTemplateModal from "@/features/transfer-templates/components/EditTransferTemplateModal";
 import { useTransferTemplates } from "@/features/transfer-templates/hooks/useTransferTemplates";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
-import type { Transaction } from "@/features/transactions/types/transactions.types";
 import type { TransferTemplate } from "@/features/transfer-templates/types/transfer.types";
 import {
   BanknotesIcon,
-  ClockIcon,
-  EyeIcon,
   PencilSquareIcon,
   PauseIcon,
   PlayIcon,
-  RectangleStackIcon,
 } from "@heroicons/react/24/outline";
 
 const formatMoney = (value: number) =>
@@ -99,7 +95,7 @@ function getDueProgressInfo(
 }
 
 export default function TransferenciasPage() {
-  const [tab, setTab] = useState<"active" | "history">("active");
+  const [tab, setTab] = useState<"active" | "tabreport">("active");
 
   const {
     templates,
@@ -111,10 +107,8 @@ export default function TransferenciasPage() {
   } = useTransferTemplates();
 
   const { accounts } = useAccounts();
-
   const {
     transactions,
-    loading: loadingTransactions,
     reload: reloadTransactions,
   } = useTransactions();
 
@@ -127,20 +121,23 @@ export default function TransferenciasPage() {
   );
   const [editOpen, setEditOpen] = useState(false);
 
-  const [viewOpen, setViewOpen] = useState(false);
-  const [viewData, setViewData] = useState<Transaction | null>(null);
-
   const transferTemplateIds = useMemo(() => new Set(templates.map((t) => t.id)), [templates]);
-
   const transferTransactions = useMemo(() => {
     return transactions.filter((t) => {
       if (!t.description) return false;
-      // Tag insertado por backend: transfer_template_id:${templateId}
       return Array.from(transferTemplateIds).some((id) =>
         t.description?.includes(`transfer_template_id:${id}`)
       );
     });
   }, [transactions, transferTemplateIds]);
+
+  const tabs = useMemo(
+    () => [
+      { id: "active" as const, label: "Plantillas", count: templates.length },
+      { id: "tabreport" as const, label: "Reporte" },
+    ],
+    [templates.length]
+  );
 
   const frequencyBadgeLabel = (t: TransferTemplate) => {
     if (t.frequency === "custom" && t.customIntervalDays != null && t.customIntervalDays > 0) {
@@ -300,69 +297,6 @@ export default function TransferenciasPage() {
     },
   ];
 
-  const columns: Column<Transaction>[] = [
-    {
-      key: "type",
-      header: "Tipo",
-      render: (item) => <FlowIconTransaction type={item.type} />,
-    },
-    {
-      key: "date",
-      header: "Fecha",
-      render: (item) => (
-        <span className="text-muted-foreground">{item.date}</span>
-      ),
-    },
-    {
-      key: "description",
-      header: "Descripción",
-      render: (item) => (
-        <p
-          className="max-w-xs truncate font-medium text-foreground"
-          title={item.description}
-        >
-          {item.description}
-        </p>
-      ),
-    },
-    {
-      key: "amount",
-      header: "Monto ($)",
-      className: "text-right",
-      render: (item) => (
-        <span
-          className={`font-semibold ${
-            item.type === "ingreso" ? "text-emerald-500" : "text-rose-500"
-          }`}
-        >
-          {item.type === "ingreso" ? "+" : "-"}
-          {formatMoney(Number(item.amount))}
-        </span>
-      ),
-    },
-    {
-      key: "receipt",
-      header: "",
-      className: "text-right w-12",
-      render: (item) => (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted"
-          title="Ver detalle"
-          aria-label="Ver detalle"
-          onClick={() => {
-            setViewData(item);
-            setViewOpen(true);
-          }}
-        >
-          <EyeIcon className="size-4" />
-        </Button>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <SavvyBanner
@@ -374,40 +308,11 @@ export default function TransferenciasPage() {
         <p className="text-sm text-muted-foreground">
           {tab === "active"
             ? "Plantillas guardadas y su próximo vencimiento."
-            : "Movimientos generados desde tus plantillas de transferencia."}
+            : "Sección en construcción."}
         </p>
-
-        <div className="flex w-full shrink-0 gap-1 rounded-xl border border-border/80 bg-muted/80 p-1 sm:w-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`rounded-lg gap-1.5 px-2.5 text-muted-foreground ${
-              tab === "active"
-                ? "bg-white text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab("active")}
-            title="Plantillas"
-          >
-            <RectangleStackIcon className="size-4 shrink-0 opacity-70" />
-            <span className="hidden sm:inline text-xs font-medium">Plantillas</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`rounded-lg gap-1.5 px-2.5 text-muted-foreground ${
-              tab === "history"
-                ? "bg-white text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab("history")}
-            title="Historial"
-          >
-            <ClockIcon className="size-4 shrink-0 opacity-70" />
-            <span className="hidden sm:inline text-xs font-medium">Historial</span>
-          </Button>
-        </div>
       </div>
+
+      <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transferencias" />
 
       {tab === "active" && (
         <section>
@@ -422,15 +327,11 @@ export default function TransferenciasPage() {
         </section>
       )}
 
-      {tab === "history" && (
+      {tab === "tabreport" && (
         <section>
-          <CustomTable
-            data={transferTransactions}
-            columns={columns}
-            loading={loadingTransactions}
-            rowKey={(item) => item.id}
-            totalPages={1}
-            onPageChange={() => {}}
+          <ReportTransferTemplate
+            templates={templates}
+            transferTransactions={transferTransactions}
           />
         </section>
       )}
@@ -450,7 +351,6 @@ export default function TransferenciasPage() {
           setSelectedTemplate(null);
           toast.success(description ? description : "Pago ejecutado");
           await reloadTemplates();
-          await reloadTransactions();
         }}
       />
 
@@ -470,12 +370,6 @@ export default function TransferenciasPage() {
             setEditTemplate(null);
           }
         }}
-      />
-
-      <ViewModal
-        open={viewOpen}
-        onClose={() => setViewOpen(false)}
-        data={viewData}
       />
     </div>
   );

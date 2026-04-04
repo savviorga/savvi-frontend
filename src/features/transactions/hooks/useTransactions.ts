@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { TransactionService } from "../services/transaction.service";
 import { Transaction, CreateTransactionDto } from "../types/transactions.types";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
+import { useS3Upload } from "@/hooks/useS3Upload";
 
 /** Más reciente primero (fecha desc; mismo día → id para orden estable). */
 function sortTransactionsNewestFirst(list: Transaction[]): Transaction[] {
@@ -16,6 +17,7 @@ function sortTransactionsNewestFirst(list: Transaction[]): Transaction[] {
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const s3Upload = useS3Upload();
 
   async function load() {
     try {
@@ -36,7 +38,27 @@ export function useTransactions() {
       setLoading(true);
       const transaction = await TransactionService.create(payload);
       if (payload.files?.length) {
-        await TransactionService.uploadFiles(transaction.id, payload.files);
+        try {
+          const folder = `transactions/${transaction.id}`;
+          const results = await s3Upload.uploadFiles(payload.files, folder);
+          await TransactionService.confirmUpload(transaction.id, results);
+        } catch (uploadErr) {
+          console.error("[useTransactions] Error en subida de archivos:", uploadErr);
+          if (isApiError(uploadErr)) {
+            getErrorMessages(uploadErr).forEach((msg) =>
+              toast.error(msg),
+            );
+          } else {
+            const msg =
+              uploadErr instanceof Error
+                ? uploadErr.message
+                : "La transacción se guardó pero falló la subida de archivos.";
+            toast.error(msg);
+          }
+          await load();
+          setLoading(false);
+          return false;
+        }
       }
       await load();
       toast.success("Transacción creada exitosamente");
@@ -138,5 +160,9 @@ export function useTransactions() {
     remove,
     bulk,
     reload: load,
+    uploadProgress: s3Upload.progress,
+    uploadTotalPercent: s3Upload.totalPercent,
+    isUploading: s3Upload.uploading,
+    abortUpload: s3Upload.abort,
   };
 }

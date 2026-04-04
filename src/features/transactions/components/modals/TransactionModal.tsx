@@ -264,7 +264,7 @@ export default function TransactionModal({
           }}
           className="space-y-4"
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <SavvyDatePicker
                 label="Fecha"
@@ -293,7 +293,6 @@ export default function TransactionModal({
               />
             </div>
 
-            {/* Cuenta */}
             <div>
               <SavvySelect
                 label="Cuenta"
@@ -327,12 +326,10 @@ export default function TransactionModal({
             </div>
           </div>
 
-          {/* Monto: fuera del grid de 2 cols para que el listado de Cuenta no quede tapado por esta celda */}
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">
               Monto
             </label>
-
             <CurrencyField
               value={form.amount}
               onChange={(value) =>
@@ -341,21 +338,20 @@ export default function TransactionModal({
             />
           </div>
 
-      {/* Descripción */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1 text-bold">
-          Descripción
-        </label>
-        <textarea
-          name="description"
-          value={form.description}
-          onChange={(e) =>
-            setForm((f) => ({ ...f, description: e.target.value }))
-          }
-          className="mt-1 block w-full rounded-xl border-1 border-border focus:border-accent focus:ring-2 focus:ring-accent/25 focus:ring-opacity-50 text-sm px-3 py-2 transition placeholder:text-muted-foreground bg-white resize-none"
-          rows={3}
-        />
-      </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">
+              Descripción
+            </label>
+            <textarea
+              name="description"
+              value={form.description}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
+              className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 resize-none"
+              rows={3}
+            />
+          </div>
 
       {/** Toggle recurrente (solo en creación, no en edición) */}
       {!editData && (
@@ -536,8 +532,8 @@ export default function TransactionModal({
         </div>
       )}
 
-      <div className="flex flex-col justify-center border-t border-border">
-        <h1 className="text-md font-bold py-2">Subir Documentos</h1>
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className="text-sm font-semibold text-foreground">Subir Documentos</p>
 
         <FileUploader
           maxFiles={5}
@@ -563,28 +559,21 @@ export default function TransactionModal({
         />
       </div>
 
-      {/* Botones */}
-      <div className="flex justify-end space-x-3 pt-4 border-t border-border">
-        <div>
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="w-full justify-start rounded-lg border-slate-200 text-left font-normal text-foreground hover:bg-slate-50"
-          >
-            Cancelar
-          </Button>
-        </div>
-
-        <div>
-          <Button
-            type="submit"
-            variant="default"
-            className="w-full justify-start rounded-lg border-0 bg-[#0B1829] text-left font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40"
-          >
-            Guardar
-          </Button>
-        </div>
-
+      <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end sm:gap-3">
+        <Button
+          onClick={onClose}
+          variant="outline"
+          className="w-full rounded-lg border-slate-200 font-normal text-foreground hover:bg-slate-50 sm:w-auto"
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="submit"
+          variant="default"
+          className="w-full rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 sm:w-auto"
+        >
+          Guardar
+        </Button>
       </div>
     </form>
       </div>

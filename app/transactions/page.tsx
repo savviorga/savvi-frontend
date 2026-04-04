@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import { TransactionService } from "@/features/transactions/services/transaction.service";
 import { TransferTemplatesService } from "@/features/transfer-templates/services/transfer-templates.service";
+import { useS3Upload } from "@/hooks/useS3Upload";
 
 import TransactionTable from "@/features/transactions/components/modals/TransactionTable";
 import TransactionModal from "@/features/transactions/components/modals/TransactionModal";
+import ReportTransactions from "@/features/transactions/components/ReportTransactions";
 
 import { Transaction, CreateTransactionDto } from "@/features/transactions/types/transactions.types";
 
@@ -17,10 +19,12 @@ import ViewModal from "@/features/transactions/components/modals/ViewModal";
 
 import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
+import PlannerTabs from "@/components/Tabs/PlannerTabs";
 import toast from "react-hot-toast";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
 export default function TransactionsPage() {
+  const [tab, setTab] = useState<"transactions" | "report">("transactions");
   const [viewData, setViewData] = useState<Transaction | null>(null);
 
   const {
@@ -33,12 +37,20 @@ export default function TransactionsPage() {
   } = useTransactions();
   const { categories } = useCategories();
   const { accounts } = useAccounts();
+  const s3Upload = useS3Upload();
 
   // Estado del modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<Transaction | null>(null);
 
   const [viewOpen, setViewOpen] = useState(false);
+  const tabs = useMemo(
+    () => [
+      { id: "transactions" as const, label: "Transacciones", count: transactions.length },
+      { id: "report" as const, label: "Reporte" },
+    ],
+    [transactions.length]
+  );
 
   const handleSubmit = async (payload: CreateTransactionDto) => {
     const success = await create(payload);
@@ -92,10 +104,12 @@ export default function TransactionsPage() {
         description: payload.description,
       });
 
-      // Si el usuario adjuntó documentos, los subimos al transaction creada.
+      // Si el usuario adjuntó documentos, los subimos directo a S3 vía presigned URL.
       const transaction = result.transaction as any;
       if (payload.files?.length && transaction?.id) {
-        await TransactionService.uploadFiles(transaction.id, payload.files);
+        const folder = `transactions/${transaction.id}`;
+        const results = await s3Upload.uploadFiles(payload.files, folder);
+        await TransactionService.confirmUpload(transaction.id, results);
       }
 
       await reload();
@@ -144,19 +158,27 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
-      <TransactionTable
-        items={transactions}
-        loading={loadingTransactions}
-        onDelete={remove}
-        onEdit={(id) => {
-          const tx = transactions.find((t) => t.id === id);
-          if (tx) {
-            setEditData(tx);
-            setModalOpen(true);
-          }
-        }}
-        onShow={handleShow}
-      />
+      <div className="mb-4">
+        <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transacciones" />
+      </div>
+
+      {tab === "transactions" && (
+        <TransactionTable
+          items={transactions}
+          loading={loadingTransactions}
+          onDelete={remove}
+          onEdit={(id) => {
+            const tx = transactions.find((t) => t.id === id);
+            if (tx) {
+              setEditData(tx);
+              setModalOpen(true);
+            }
+          }}
+          onShow={handleShow}
+        />
+      )}
+
+      {tab === "report" && <ReportTransactions transactions={transactions} />}
 
       <TransactionModal
         open={modalOpen}

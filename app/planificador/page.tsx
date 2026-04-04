@@ -5,8 +5,8 @@ import SavvyBannerHome, {
   type SavvyBannerHomeStat,
 } from "@/components/Banner/SavvyBannerHome";
 import CustomTable, { type Column } from "@/components/Table/CustomTable";
+import PlannerTabs from "@/components/Tabs/PlannerTabs";
 import { Button } from "@/components/ui/shadcn-button";
-import { cn } from "@/lib/utils";
 import { usePaymentPlanner } from "@/features/payment-planner/hooks/usePaymentPlanner";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useCategories } from "@/features/categories/hooks/useCategories";
@@ -145,6 +145,19 @@ export default function PlanificadorPage() {
     );
     return rows;
   }, [debts]);
+
+  const plannerTabs = useMemo(
+    () => [
+      { id: "obligations" as const, label: "Obligaciones", count: pendingDebts.length },
+      { id: "paid" as const, label: "Pagadas", count: paidDebts.length },
+      {
+        id: "history" as const,
+        label: "Historial de pagos",
+        count: paymentHistoryRows.length,
+      },
+    ],
+    [pendingDebts.length, paidDebts.length, paymentHistoryRows.length],
+  );
 
   const plannerBannerStats: SavvyBannerHomeStat[] = useMemo(
     () => [
@@ -365,72 +378,12 @@ export default function PlanificadorPage() {
       </div>
 
       <div className="mb-4">
-        <div
-          role="tablist"
-          aria-label="Vistas del planificador"
-          className="flex gap-1 border-b border-border"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "obligations"}
-            id="tab-obligations"
-            onClick={() => setTab("obligations")}
-            className={cn(
-              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-              tab === "obligations"
-                ? "border-[#00C49A] text-[#0B1829]"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Obligaciones
-            {pendingDebts.length > 0 && (
-              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                {pendingDebts.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "paid"}
-            id="tab-paid"
-            onClick={() => setTab("paid")}
-            className={cn(
-              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-              tab === "paid"
-                ? "border-[#00C49A] text-[#0B1829]"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Pagadas
-            {paidDebts.length > 0 && (
-              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                {paidDebts.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "history"}
-            id="tab-history"
-            onClick={() => setTab("history")}
-            className={cn(
-              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-              tab === "history"
-                ? "border-[#00C49A] text-[#0B1829]"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Historial de pagos
-            {paymentHistoryRows.length > 0 && (
-              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                {paymentHistoryRows.length}
-              </span>
-            )}
-          </button>
-        </div>
+        <PlannerTabs
+          tabs={plannerTabs}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Vistas del planificador"
+        />
       </div>
 
       {tab === "obligations" && (

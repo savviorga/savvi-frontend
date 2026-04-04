@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
 import { Transaction } from "../../types/transactions.types";
 import { FlowIconTransaction } from "../FlowIconTransaction";
@@ -17,8 +18,19 @@ export default function TransactionTable({
   items,
   loading,
   onShow,
+  onDelete,
 }: TransactionTableProps) {
   const [page, setPage] = useState(1);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const handleDelete = (id: string) => {
+    if (confirmId === id) {
+      onDelete?.(id);
+      setConfirmId(null);
+    } else {
+      setConfirmId(id);
+    }
+  };
 
   const columns: Column<Transaction>[] = [
     {
@@ -66,17 +78,34 @@ export default function TransactionTable({
       ),
     },
     {
-      key: "receipt",
-      header: "Receipt",
+      key: "actions",
+      header: "",
       className: "text-right",
       render: (item) => (
-        <button
-          type="button"
-          className="rounded-full border border-accent px-4 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/10"
-          onClick={() => onShow?.(item.id)}
-        >
-          Ver
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-full border border-accent px-4 py-1.5 text-sm font-medium transition hover:bg-accent/10"
+            onClick={() => onShow?.(item.id)}
+          >
+            Ver
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                confirmId === item.id
+                  ? "border border-red-500 bg-red-500 text-white hover:bg-red-600"
+                  : "border border-red-200 text-red-500 hover:bg-red-50"
+              }`}
+              onClick={() => handleDelete(item.id)}
+              onBlur={() => setConfirmId(null)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {confirmId === item.id ? "Confirmar" : "Eliminar"}
+            </button>
+          )}
+        </div>
       ),
     },
   ];

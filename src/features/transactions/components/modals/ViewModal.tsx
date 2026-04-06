@@ -34,6 +34,8 @@ function Info({
   );
 }
 
+// type: string = "ingreso" | "egreso" | "transaccion" | string;
+
 function getTypeClass(type: string) {
   const base = "inline-block rounded-full px-2 py-0.5 text-xs font-medium";
   if (type === "egreso")

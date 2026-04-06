@@ -46,6 +46,7 @@ export function FlowIconTransaction({ type }: FlowIconProps) {
     );
   }
 
+  console.log("config", config);
   const { icon: Icon, className } = config;
 
   return (

@@ -178,7 +178,7 @@ export default function TransactionsPage() {
         />
       )}
 
-      {tab === "report" && <ReportTransactions transactions={transactions} />}
+      {tab === "report" && <ReportTransactions transactions={transactions} categories={categories} />}
 
       <TransactionModal
         open={modalOpen}

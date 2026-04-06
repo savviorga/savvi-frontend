@@ -24,7 +24,7 @@ import toast from "react-hot-toast";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
 export default function TransactionsPage() {
-  const [tab, setTab] = useState<"transactions" | "report">("transactions");
+  const [tab, setTab] = useState<"transactions" | "income" | "expenses" | "transfers" | "report">("transactions");
   const [viewData, setViewData] = useState<Transaction | null>(null);
 
   const {
@@ -44,12 +44,19 @@ export default function TransactionsPage() {
   const [editData, setEditData] = useState<Transaction | null>(null);
 
   const [viewOpen, setViewOpen] = useState(false);
+  const incomeList = useMemo(() => transactions.filter((t) => t.type === "ingreso"), [transactions]);
+  const expenseList = useMemo(() => transactions.filter((t) => t.type === "egreso"), [transactions]);
+  const transferList = useMemo(() => transactions.filter((t) => t.type === "transferencia"), [transactions]);
+
   const tabs = useMemo(
     () => [
-      { id: "transactions" as const, label: "Transacciones", count: transactions.length },
+      { id: "transactions" as const, label: "Todas", count: transactions.length },
       { id: "report" as const, label: "Reporte" },
+      { id: "income" as const, label: "Ingresos", count: incomeList.length },
+      { id: "expenses" as const, label: "Gastos", count: expenseList.length },
+      { id: "transfers" as const, label: "Transferencias", count: transferList.length },
     ],
-    [transactions.length]
+    [transactions.length, incomeList.length, expenseList.length, transferList.length]
   );
 
   const handleSubmit = async (payload: CreateTransactionDto) => {
@@ -140,12 +147,14 @@ export default function TransactionsPage() {
 
   return (
     <>
-      <SavvyBanner
-        title="Transacciones"
-        subtitle="Gestiona las transacciones de tus cuentas para un mejor control financiero."
-      />
+      <div className="hidden md:block">
+        <SavvyBanner
+          title="Transacciones"
+          subtitle="Gestiona las transacciones de tus cuentas para un mejor control financiero."
+        />
+      </div>
 
-      <div className="flex justify-end mb-4">
+      <div className="hidden justify-end mb-4 md:flex">
         <Button
           onClick={() => {
             setEditData(null);
@@ -158,13 +167,28 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
+      {/* FAB móvil */}
+      <button
+        type="button"
+        onClick={() => {
+          setEditData(null);
+          setModalOpen(true);
+        }}
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#0B1829] text-white shadow-lg shadow-black/20 transition-transform active:scale-95 md:hidden"
+        aria-label="Crear transacción"
+      >
+        <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+      </button>
+
       <div className="mb-4">
         <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transacciones" />
       </div>
 
-      {tab === "transactions" && (
+      {(tab === "transactions" || tab === "income" || tab === "expenses" || tab === "transfers") && (
         <TransactionTable
-          items={transactions}
+          items={tab === "income" ? incomeList : tab === "expenses" ? expenseList : tab === "transfers" ? transferList : transactions}
           loading={loadingTransactions}
           onDelete={remove}
           onEdit={(id) => {

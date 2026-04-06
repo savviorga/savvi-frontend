@@ -22,7 +22,11 @@ export default function PlannerTabs<T extends string>({
   ariaLabel = "Pestañas",
 }: PlannerTabsProps<T>) {
   return (
-    <div role="tablist" aria-label={ariaLabel} className="flex gap-1 border-b border-border">
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 scrollbar-none"
+    >
       {tabs.map((tab) => {
         const isActive = value === tab.id;
         const tabId = `tab-${tab.id}`;
@@ -36,7 +40,7 @@ export default function PlannerTabs<T extends string>({
             id={tabId}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
               isActive
                 ? "border-[#00C49A] text-[#0B1829]"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -44,7 +48,7 @@ export default function PlannerTabs<T extends string>({
           >
             {tab.label}
             {!!tab.count && tab.count > 0 && (
-              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground sm:ml-2 sm:px-2">
                 {tab.count}
               </span>
             )}

@@ -17,7 +17,7 @@ const FLOW_CONFIG: Record<
 > = {
   ingreso: {
     icon: ArrowDownIcon,
-    className: "border-accent/50 text-accent bg-accent/10",
+    className: "border-green-400 text-green-700 bg-green-200",
   },
   egreso: {
     icon: ArrowUpIcon,
@@ -25,7 +25,7 @@ const FLOW_CONFIG: Record<
   },
   transaccion: {
     icon: ArrowsRightLeftIcon,
-    className: "border-accent/40 text-accent bg-muted",
+    className: "border-blue-400 text-blue-700 bg-blue-200",
   },
 };
 
@@ -37,7 +37,7 @@ export function FlowIconTransaction({ type }: FlowIconProps) {
     return (
       <>
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-accent/40 text-accent bg-muted"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-purple-400 text-accent bg-purple-400"
           title={String(type)}
         >
           <QuestionMarkCircleIcon className="h-4 w-4" />

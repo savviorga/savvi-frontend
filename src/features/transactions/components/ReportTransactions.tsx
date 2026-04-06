@@ -238,13 +238,10 @@ export default function ReportTransactions({ transactions, categories = [] }: Re
 
   return (
     <>
-    {/* Mobile view */}
-    <div className="md:hidden">
-      <MobileReportView transactions={transactions} categories={categories} />
-    </div>
+    <MobileReportView transactions={transactions} categories={categories} />
 
-    {/* Desktop view */}
-    <section className="hidden space-y-5 md:block">
+    {/* Legacy desktop view — hidden, kept for reference */}
+    <section className="hidden space-y-5" style={{ display: "none" }}>
       {/* Filtro por fecha */}
       <div className="rounded-2xl border border-border bg-card p-3 sm:p-4">
         <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">

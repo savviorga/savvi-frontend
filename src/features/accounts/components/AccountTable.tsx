@@ -32,6 +32,18 @@ export default function AccountTable({
       ),
     },
     {
+      key: "balance",
+      header: "Saldo",
+      render: (account) => {
+        const val = Number(account.balance ?? 0);
+        return (
+          <p className={`font-semibold tabular-nums ${val < 0 ? "text-rose-500" : "text-emerald-600"}`}>
+            {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val)}
+          </p>
+        );
+      },
+    },
+    {
       key: "isCredit",
       header: "Crédito",
       render: (account) => (

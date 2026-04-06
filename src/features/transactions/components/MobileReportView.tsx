@@ -218,7 +218,7 @@ export default function MobileReportView({
         : "text-foreground";
 
   return (
-    <section className="space-y-4">
+    <section className="mx-auto max-w-2xl space-y-5">
       {/* 1. Quick filter pills */}
       <div className="flex items-center gap-2">
         {(

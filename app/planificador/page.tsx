@@ -12,6 +12,7 @@ import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useCategories } from "@/features/categories/hooks/useCategories";
 import DebtFormModal from "@/features/payment-planner/components/DebtFormModal";
 import RegisterPaymentModal from "@/features/payment-planner/components/RegisterPaymentModal";
+import { DollarSign, Pencil, Trash2 } from "lucide-react";
 import type {
   Debt,
   CreateDebtDto,
@@ -285,19 +286,20 @@ export default function PlanificadorPage() {
     },
     {
       key: "actions",
-      header: "Acciones",
+      header: "",
       className: "text-right",
       render: (d) => {
         const isPaid = d.status === "paid";
         return (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5">
             {!isPaid && (
               <button
                 type="button"
                 onClick={() => setRegisterPaymentDebt(d)}
-                className="rounded-lg bg-[#0B1829] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#0B1829]/90"
+                title="Registrar pago"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0B1829] text-white transition hover:bg-[#0B1829]/80"
               >
-                Registrar pago
+                <DollarSign className="h-4 w-4" />
               </button>
             )}
             {!isPaid && (
@@ -307,17 +309,19 @@ export default function PlanificadorPage() {
                   setEditDebt(d);
                   setFormOpen(true);
                 }}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+                title="Editar"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
               >
-                Editar
+                <Pencil className="h-4 w-4" />
               </button>
             )}
             <button
               type="button"
               onClick={() => handleDelete(d)}
-              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+              title="Eliminar"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-500 transition hover:bg-rose-50 hover:text-rose-600"
             >
-              Eliminar
+              <Trash2 className="h-4 w-4" />
             </button>
           </div>
         );

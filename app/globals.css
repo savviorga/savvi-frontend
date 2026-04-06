@@ -194,6 +194,14 @@ html::-webkit-scrollbar-corner,
   background: transparent;
 }
 
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes savvi-linear-loader {
   0% {
     transform: translateX(-100%);

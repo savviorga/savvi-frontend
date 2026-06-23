@@ -214,7 +214,7 @@ export function horizontalBarGradient(
 export const doughnutCenterTextPlugin = {
   id: "savviDoughnutCenter",
   afterDraw(chart: ChartJS) {
-    const type = chart.config.type;
+    const type = (chart.config as { type?: string }).type;
     if (type !== "doughnut" && type !== "pie") return;
 
     const dataset = chart.data.datasets[0];

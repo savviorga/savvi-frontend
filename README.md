@@ -20,6 +20,38 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Docker
+
+Este proyecto incluye un `Dockerfile` multi-etapa que usa la salida `standalone` de Next.js para generar una imagen de producción liviana.
+
+### Construir la imagen
+
+```bash
+docker build -t savvi-frontend .
+```
+
+### Ejecutar el contenedor
+
+```bash
+docker run -p 3000:3000 savvi-frontend
+```
+
+Luego abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+
+### Variables de entorno
+
+Puedes pasar variables de entorno en tiempo de ejecución con `-e` o un archivo `.env`:
+
+```bash
+docker run -p 3000:3000 --env-file .env savvi-frontend
+```
+
+El puerto se puede cambiar con la variable `PORT` (por defecto `3000`):
+
+```bash
+docker run -p 8080:8080 -e PORT=8080 savvi-frontend
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

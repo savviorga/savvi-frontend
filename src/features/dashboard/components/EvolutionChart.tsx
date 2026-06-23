@@ -18,7 +18,26 @@ import {
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
 import zoomPlugin from "chartjs-plugin-zoom";
+import { LineChart, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type { EvolutionPoint } from "../utils/dashboard.utils";
+import {
+  CHART_EXPENSE,
+  CHART_EXPENSE_FILL,
+  CHART_MINT,
+  CHART_MINT_FILL,
+  DASHBOARD_CARD,
+} from "../utils/dashboard.utils";
+import {
+  applySavviChartDefaults,
+  formatChartCurrency,
+  savviChartTitle,
+  savviLegend,
+  savviScaleX,
+  savviScaleY,
+  savviTooltip,
+  verticalBarGradient,
+} from "../utils/chartTheme";
+import DashboardSectionHeading from "./DashboardSectionHeading";
 
 ChartJS.register(
   CategoryScale,
@@ -31,8 +50,10 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
-  zoomPlugin
+  zoomPlugin,
 );
+
+applySavviChartDefaults();
 
 interface EvolutionChartProps {
   data: EvolutionPoint[];
@@ -40,9 +61,7 @@ interface EvolutionChartProps {
 
 export default function EvolutionChart({ data }: EvolutionChartProps) {
   const chartRef = useRef<ChartJS<"bar", number[], string> | null>(null);
-  const [scaleType, setScaleType] = useState<"linear" | "logarithmic">(
-    "linear"
-  );
+  const [scaleType, setScaleType] = useState<"linear" | "logarithmic">("linear");
 
   const chartData = useMemo<ChartData<"bar", number[], string>>(
     () => ({
@@ -51,141 +70,162 @@ export default function EvolutionChart({ data }: EvolutionChartProps) {
         {
           label: "Ingresos",
           data: data.map((d) =>
-            scaleType === "logarithmic" ? Math.max(d.ingresos, 1) : d.ingresos
+            scaleType === "logarithmic" ? Math.max(d.ingresos, 1) : d.ingresos,
           ),
-          backgroundColor: "rgba(16, 185, 129, 0.6)",
-          borderColor: "rgb(16, 185, 129)",
-          borderWidth: 1,
+          backgroundColor: (ctx) => {
+            const { chart } = ctx;
+            return verticalBarGradient(
+              chart.ctx,
+              chart.chartArea,
+              "rgba(0, 196, 154, 0.92)",
+              "rgba(0, 196, 154, 0.28)",
+              CHART_MINT_FILL,
+            );
+          },
+          hoverBackgroundColor: "rgba(0, 196, 154, 1)",
+          borderColor: CHART_MINT,
+          borderWidth: 0,
+          borderRadius: 6,
+          borderSkipped: false,
+          maxBarThickness: 36,
         },
         {
           label: "Gastos",
           data: data.map((d) =>
-            scaleType === "logarithmic" ? Math.max(d.gastos, 1) : d.gastos
+            scaleType === "logarithmic" ? Math.max(d.gastos, 1) : d.gastos,
           ),
-          backgroundColor: "rgba(244, 63, 94, 0.6)",
-          borderColor: "rgb(244, 63, 94)",
-          borderWidth: 1,
+          backgroundColor: (ctx) => {
+            const { chart } = ctx;
+            return verticalBarGradient(
+              chart.ctx,
+              chart.chartArea,
+              "rgba(244, 63, 94, 0.9)",
+              "rgba(244, 63, 94, 0.22)",
+              CHART_EXPENSE_FILL,
+            );
+          },
+          hoverBackgroundColor: "rgba(244, 63, 94, 1)",
+          borderColor: CHART_EXPENSE,
+          borderWidth: 0,
+          borderRadius: 6,
+          borderSkipped: false,
+          maxBarThickness: 36,
         },
       ],
     }),
-    [data, scaleType]
+    [data, scaleType],
   );
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        position: "top" as const,
+      responsive: true,
+      maintainAspectRatio: false,
+      animations: {
+        colors: false,
       },
-      title: {
-        display: true,
-        text: "Evolución en el tiempo",
-        font: { size: 16 },
-      },
-      zoom: {
-        pan: {
-          enabled: true,
-          mode: "x",
-          modifierKey: "shift",
+      layout: { padding: { top: 4, right: 8, bottom: 0, left: 4 } },
+      datasets: {
+        bar: {
+          barPercentage: 0.72,
+          categoryPercentage: 0.78,
         },
+      },
+      plugins: {
+        legend: savviLegend("top"),
+        title: savviChartTitle("Ingresos vs. gastos"),
+        tooltip: savviTooltip((ctx) => {
+          const value = ctx.parsed.y ?? 0;
+          return ` ${ctx.dataset.label}: ${formatChartCurrency(value)}`;
+        }),
         zoom: {
-          wheel: { enabled: true },
-          pinch: { enabled: true },
-          drag: {
-            enabled: true,
-            backgroundColor: "rgba(59, 130, 246, 0.15)",
-          },
-          mode: "x",
-        },
-      },
-    },
-    scales: {
-      y: {
-        type: scaleType,
-        beginAtZero: scaleType === "linear",
-        min: scaleType === "logarithmic" ? 1 : 0,
-        ticks: {
-          callback: (value: unknown) => {
-            const n = Number(value);
-            const safe = Number.isFinite(n) ? n : 0;
-            return new Intl.NumberFormat("es-CO", {
-              style: "currency",
-              currency: "COP",
-              maximumFractionDigits: 0,
-            }).format(safe);
+          pan: { enabled: true, mode: "x", modifierKey: "shift" },
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            drag: {
+              enabled: true,
+              backgroundColor: "rgba(0, 196, 154, 0.1)",
+              borderColor: "rgba(0, 196, 154, 0.45)",
+              borderWidth: 1,
+            },
+            mode: "x",
           },
         },
       },
-    },
-  }), [scaleType]);
+      scales: {
+        x: {
+          ...savviScaleX({ hideGrid: true }),
+          stacked: false,
+        },
+        y: {
+          ...savviScaleY({
+            type: scaleType,
+            beginAtZero: scaleType === "linear",
+            min: scaleType === "logarithmic" ? 1 : 0,
+            currencyTicks: true,
+          }),
+        },
+      },
+    }),
+    [scaleType],
+  );
 
   const resetView = () => {
-    const chart = chartRef.current as (ChartJS<"bar"> & {
-      resetZoom?: () => void;
-    }) | null;
+    const chart = chartRef.current as (ChartJS<"bar"> & { resetZoom?: () => void }) | null;
     chart?.resetZoom?.();
   };
 
   const zoomIn = () => {
-    const chart = chartRef.current as (ChartJS<"bar"> & {
-      zoom?: (amount: number) => void;
-    }) | null;
+    const chart = chartRef.current as (ChartJS<"bar"> & { zoom?: (n: number) => void }) | null;
     chart?.zoom?.(1.2);
   };
 
   const zoomOut = () => {
-    const chart = chartRef.current as (ChartJS<"bar"> & {
-      zoom?: (amount: number) => void;
-    }) | null;
+    const chart = chartRef.current as (ChartJS<"bar"> & { zoom?: (n: number) => void }) | null;
     chart?.zoom?.(0.8);
   };
 
+  const toolBtn =
+    "inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:border-mint/40 hover:bg-mint/5";
+
   return (
-    <div className="h-[280px] rounded-2xl border border-slate-200/60 bg-white p-4 shadow-lg shadow-slate-200/30">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="text-xs font-medium text-slate-600">Escala:</label>
-        <select
-          value={scaleType}
-          onChange={(e) =>
-            setScaleType(e.target.value as "linear" | "logarithmic")
-          }
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-        >
-          <option value="linear">Lineal</option>
-          <option value="logarithmic">Logarítmica</option>
-        </select>
-        <button
-          type="button"
-          onClick={zoomIn}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-        >
-          Zoom +
-        </button>
-        <button
-          type="button"
-          onClick={zoomOut}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-        >
-          Zoom -
-        </button>
-        <button
-          type="button"
-          onClick={resetView}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-        >
-          Reset vista
-        </button>
-        <span className="text-[11px] text-slate-500">
-          Scroll para zoom, arrastre para seleccionar, Shift+drag para mover.
-        </span>
+    <section>
+      <DashboardSectionHeading
+        title="Evolución en el tiempo"
+        description="Comparativa de ingresos y gastos del periodo seleccionado"
+        icon={LineChart}
+      />
+      <div className={`${DASHBOARD_CARD} p-4 sm:p-5`}>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium text-gray-500">Escala</label>
+          <select
+            value={scaleType}
+            onChange={(e) => setScaleType(e.target.value as "linear" | "logarithmic")}
+            className="rounded-lg border border-gray-200 bg-gray-50/80 px-2 py-1.5 text-xs font-medium text-[#0B1829] focus:border-mint focus:outline-none focus:ring-2 focus:ring-mint/25"
+          >
+            <option value="linear">Lineal</option>
+            <option value="logarithmic">Logarítmica</option>
+          </select>
+          <button type="button" onClick={zoomIn} className={toolBtn}>
+            <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+            Acercar
+          </button>
+          <button type="button" onClick={zoomOut} className={toolBtn}>
+            <ZoomOut className="h-3.5 w-3.5" aria-hidden />
+            Alejar
+          </button>
+          <button type="button" onClick={resetView} className={toolBtn}>
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            Restablecer
+          </button>
+          <span className="ml-auto hidden text-[11px] text-gray-400 sm:inline">
+            Rueda: zoom · Arrastrar: selección · Shift+arrastrar: desplazar
+          </span>
+        </div>
+        <div className="h-[320px] w-full">
+          <Bar ref={chartRef} data={chartData} options={options} />
+        </div>
       </div>
-      <Bar ref={chartRef} data={chartData} options={options} />
-    </div>
+    </section>
   );
 }

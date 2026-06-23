@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
+import { ClipboardList } from "lucide-react";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
 import DeleteButton from "@/components/Buttons/DeleteButton";
 
@@ -136,17 +136,17 @@ export default function BudgetTable({
     {
       key: "actions",
       header: "",
-      className: "text-right w-36",
+      className: "text-right w-52",
       render: (row) => {
         return (
-          <div className="flex flex-wrap items-center justify-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
               href={`/budget/${row.id}`}
-              className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
+              className="inline-flex items-center gap-1.5 rounded-full border border-mint/35 bg-white px-3 py-1.5 text-sm font-medium text-[#0B1829] transition hover:border-mint/60 hover:bg-mint/5"
               title="Detalle (facturas, servicios…)"
-              aria-label="Ver detalle del presupuesto"
             >
-              <ClipboardDocumentListIcon className="size-4" />
+              <ClipboardList className="h-3.5 w-3.5 shrink-0 text-mint" aria-hidden />
+              Detalle
             </Link>
             {onDelete && (
               <DeleteButton

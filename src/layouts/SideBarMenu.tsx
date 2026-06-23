@@ -7,6 +7,7 @@ import {
   ArrowRightOnRectangleIcon,
   BanknotesIcon,
   ChartPieIcon,
+  ChatBubbleLeftRightIcon,
   ClipboardDocumentListIcon,
   HomeIcon,
   TagIcon,
@@ -53,6 +54,11 @@ const menuItems = [
     href: "/transactions",
     label: "Transacciones",
     icon: ArrowsRightLeftIcon,
+  },
+  {
+    href: "/savvi-ia",
+    label: "Savvi IA",
+    icon: ChatBubbleLeftRightIcon,
   },
 ] as const;
 

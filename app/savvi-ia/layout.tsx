@@ -2,18 +2,18 @@ import type { Metadata } from "next";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 export const metadata: Metadata = {
-  title: "Dashboard | Savvi",
-  description: "Resumen de ingresos, gastos y balance por periodo",
+  title: "Savvi IA",
+  description: "Asistente conversacional de Savvi",
 };
 
-export default function DashboardLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <ProtectedRoute>
-      <main className="mx-auto w-full max-w-6xl flex-1 bg-[#F8FAFB] p-6 sm:p-8">
+      <main className="flex h-full min-h-0 flex-1 w-full p-4 md:p-6">
         {children}
       </main>
     </ProtectedRoute>

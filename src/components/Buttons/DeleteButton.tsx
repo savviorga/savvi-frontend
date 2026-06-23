@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DeleteButtonProps {
   onDelete: () => Promise<void> | void;
   confirmMessage?: string;
   label?: string;
   disabled?: boolean;
+  showIcon?: boolean;
   className?: string;
 }
 
@@ -15,6 +18,7 @@ export default function DeleteButton({
   confirmMessage = "¿Eliminar? Esta acción no se puede deshacer.",
   label = "Eliminar",
   disabled = false,
+  showIcon = true,
   className,
 }: DeleteButtonProps) {
   const [loading, setLoading] = useState(false);
@@ -36,12 +40,17 @@ export default function DeleteButton({
           setLoading(false);
         }
       }}
-      className={
-        className ??
-        "rounded-xl border border-rose-200 px-3 py-1 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
-      }
+      className={cn(
+        "inline-flex items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50",
+        className,
+      )}
     >
-      {loading ? "Eliminando..." : label}
+      {loading ? (
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+      ) : showIcon ? (
+        <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      ) : null}
+      {loading ? "Eliminando…" : label}
     </button>
   );
 }

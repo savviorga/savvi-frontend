@@ -4,7 +4,12 @@ import { RemindersService } from "../services/transfer-templates.service";
 import type { Reminder } from "../types/transfer.types";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
-export function useReminders() {
+type UseRemindersOptions = {
+  silent?: boolean;
+};
+
+export function useReminders(options?: UseRemindersOptions) {
+  const silent = options?.silent ?? false;
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -14,9 +19,19 @@ export function useReminders() {
       const data = await RemindersService.getPending();
       setReminders(data);
     } catch (error) {
-      console.error("Error loading reminders:", error);
       setReminders([]);
-      toast.error("Error al cargar recordatorios");
+      const isNetworkError =
+        isApiError(error) && (error.statusCode === 0 || error.error === "Network");
+      if (!silent || !isNetworkError) {
+        console.error("Error loading reminders:", error);
+      }
+      if (!silent) {
+        if (isApiError(error)) {
+          getErrorMessages(error).forEach((msg) => toast.error(msg));
+        } else {
+          toast.error("Error al cargar recordatorios");
+        }
+      }
     } finally {
       setLoading(false);
     }

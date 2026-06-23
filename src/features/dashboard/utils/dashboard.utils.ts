@@ -172,3 +172,35 @@ export function getComparisonWithPreviousMonth(
   const diffPercent = ((currentGastos - previousGastos) / previousGastos) * 100;
   return { currentGastos, previousGastos, diffPercent };
 }
+
+export function formatMoney(value: number): string {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(safe);
+}
+
+/** Tarjeta estándar del dashboard (alineada con SavvyBannerHome) */
+export const DASHBOARD_CARD =
+  "rounded-2xl border border-gray-200/90 bg-white shadow-sm shadow-gray-200/25";
+
+/** Paleta de gráficos Savvi */
+export const CHART_MINT = "rgb(0, 196, 154)";
+export const CHART_MINT_FILL = "rgba(0, 196, 154, 0.65)";
+export const CHART_EXPENSE = "rgb(244, 63, 94)";
+export const CHART_EXPENSE_FILL = "rgba(244, 63, 94, 0.6)";
+
+export const CATEGORY_CHART_COLORS = [
+  "rgb(0, 196, 154)",
+  "rgb(0, 168, 140)",
+  "rgb(11, 24, 41)",
+  "rgb(6, 182, 212)",
+  "rgb(99, 102, 241)",
+  "rgb(251, 146, 60)",
+  "rgb(234, 179, 8)",
+  "rgb(236, 72, 153)",
+];

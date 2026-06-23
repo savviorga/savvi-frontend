@@ -2,11 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeftIcon,
-  PlusCircleIcon,
-  TrashIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import { Loader2, Trash2 } from "lucide-react";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import SavvyBannerHome, {
   type SavvyBannerHomeStat,
@@ -279,18 +276,26 @@ export function BudgetDetailSpreadsheet({ budgetId }: { budgetId: string }) {
     {
       key: "actions",
       header: "",
-      className: "w-14 text-right",
-      render: (row) => (
-        <button
-          type="button"
-          title="Eliminar"
-          disabled={deletingId === row.id}
-          className="inline-flex rounded-lg p-2 text-muted-foreground transition hover:bg-rose-100 hover:text-rose-600 disabled:opacity-40"
-          onClick={() => void handleRemove(row.id)}
-        >
-          <TrashIcon className="h-4 w-4" />
-        </button>
-      ),
+      className: "w-28 text-right",
+      render: (row) => {
+        const isDeleting = deletingId === row.id;
+        return (
+          <button
+            type="button"
+            title="Eliminar partida"
+            disabled={isDeleting}
+            className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50"
+            onClick={() => void handleRemove(row.id)}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            )}
+            {isDeleting ? "…" : "Eliminar"}
+          </button>
+        );
+      },
     },
   ];
 

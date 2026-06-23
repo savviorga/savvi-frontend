@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { getBearerAuthHeaders, getJsonAuthHeaders } from "@/lib/api-auth";
+import { getJsonAuthHeaders } from "@/lib/api-auth";
 import { getPublicApiUrl } from "@/lib/public-api-url";
 import type { ApiError } from "@/types/api-error.type";
 
@@ -32,6 +32,14 @@ const ALLOWED_TYPES = [
   "image/png",
   "image/jpg",
   "image/webp",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/x-m4a",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 

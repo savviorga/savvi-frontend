@@ -16,6 +16,11 @@ import { useCategories } from '@/features/categories/hooks/useCategories';
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 
 import ViewModal from "@/features/transactions/components/modals/ViewModal";
+import TransactionDateFilter from "@/features/transactions/components/TransactionDateFilter";
+import {
+  filterTransactionsByDateRange,
+  getCurrentMonthDateRange,
+} from "@/features/transactions/utils/transactionFilters";
 
 import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
@@ -44,27 +49,65 @@ export default function TransactionsPage() {
   const [editData, setEditData] = useState<Transaction | null>(null);
 
   const [viewOpen, setViewOpen] = useState(false);
-  const incomeList = useMemo(() => transactions.filter((t) => t.type === "ingreso"), [transactions]);
-  const expenseList = useMemo(() => transactions.filter((t) => t.type === "egreso"), [transactions]);
-  const transferList = useMemo(() => transactions.filter((t) => t.type === "transferencia"), [transactions]);
+  const [dateFrom, setDateFrom] = useState<Date | null>(
+    () => getCurrentMonthDateRange().from,
+  );
+  const [dateTo, setDateTo] = useState<Date | null>(
+    () => getCurrentMonthDateRange().to,
+  );
+
+  const filteredTransactions = useMemo(
+    () => filterTransactionsByDateRange(transactions, dateFrom, dateTo),
+    [transactions, dateFrom, dateTo],
+  );
+
+  const incomeList = useMemo(
+    () => filteredTransactions.filter((t) => t.type === "ingreso"),
+    [filteredTransactions],
+  );
+  const expenseList = useMemo(
+    () => filteredTransactions.filter((t) => t.type === "egreso"),
+    [filteredTransactions],
+  );
+  const transferList = useMemo(
+    () => filteredTransactions.filter((t) => t.type === "transferencia"),
+    [filteredTransactions],
+  );
+
+  const clearDateFilter = () => {
+    setDateFrom(null);
+    setDateTo(null);
+  };
 
   const tabs = useMemo(
     () => [
-      { id: "transactions" as const, label: "Todas", count: transactions.length },
+      { id: "transactions" as const, label: "Todas", count: filteredTransactions.length },
       { id: "report" as const, label: "Reporte" },
       { id: "income" as const, label: "Ingresos", count: incomeList.length },
       { id: "expenses" as const, label: "Gastos", count: expenseList.length },
       { id: "transfers" as const, label: "Transferencias", count: transferList.length },
     ],
-    [transactions.length, incomeList.length, expenseList.length, transferList.length]
+    [
+      filteredTransactions.length,
+      incomeList.length,
+      expenseList.length,
+      transferList.length,
+    ],
   );
 
-  const handleSubmit = async (payload: CreateTransactionDto) => {
+  const handleSubmit = async (
+    payload: CreateTransactionDto,
+    _editingId?: string,
+    options?: { keepOpen?: boolean }
+  ) => {
     const success = await create(payload);
     if (success) {
-      setModalOpen(false);
+      if (!options?.keepOpen) {
+        setModalOpen(false);
+      }
       setEditData(null);
     }
+    return success;
   };
 
   const handleRecurringSubmit = async (payload: {
@@ -145,6 +188,16 @@ export default function TransactionsPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    const success = await remove(id);
+    if (!success) return;
+
+    if (viewData?.id === id) {
+      setViewOpen(false);
+      setViewData(null);
+    }
+  };
+
   return (
     <>
       <div className="hidden md:block">
@@ -187,19 +240,36 @@ export default function TransactionsPage() {
       </div>
 
       {(tab === "transactions" || tab === "income" || tab === "expenses" || tab === "transfers") && (
-        <TransactionTable
-          items={tab === "income" ? incomeList : tab === "expenses" ? expenseList : tab === "transfers" ? transferList : transactions}
-          loading={loadingTransactions}
-          onDelete={remove}
-          onEdit={(id) => {
-            const tx = transactions.find((t) => t.id === id);
-            if (tx) {
-              setEditData(tx);
-              setModalOpen(true);
+        <>
+          <TransactionDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onClear={clearDateFilter}
+          />
+          <TransactionTable
+            items={
+              tab === "income"
+                ? incomeList
+                : tab === "expenses"
+                  ? expenseList
+                  : tab === "transfers"
+                    ? transferList
+                    : filteredTransactions
             }
-          }}
-          onShow={handleShow}
-        />
+            loading={loadingTransactions}
+            onDelete={handleDelete}
+            onEdit={(id) => {
+              const tx = transactions.find((t) => t.id === id);
+              if (tx) {
+                setEditData(tx);
+                setModalOpen(true);
+              }
+            }}
+            onShow={handleShow}
+          />
+        </>
       )}
 
       {tab === "report" && <ReportTransactions transactions={transactions} categories={categories} />}
@@ -220,6 +290,7 @@ export default function TransactionsPage() {
         onClose={() => setViewOpen(false)}
         data={viewData}
         accounts={accounts}
+        onDelete={handleDelete}
       />
     </>
   );

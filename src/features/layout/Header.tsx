@@ -10,6 +10,7 @@ import {
   PresentationChartLineIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import Notifications from "@/features/layout/Notifications";
 
 const navLinks = [
   {
@@ -129,56 +130,60 @@ export default function Header({ embedded = false }: HeaderProps) {
                 </nav>
               </div>
 
-              <div className="relative shrink-0" ref={userMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/40 focus-visible:ring-offset-2"
-                  aria-expanded={userMenuOpen}
-                  aria-haspopup="true"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 via-emerald-500 to-blue-500 text-sm font-bold text-white shadow-sm">
-                    {initials}
-                  </div>
-                </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Notifications />
 
-                {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-64 origin-top-right rounded-xl border border-slate-200/80 bg-white p-2 shadow-xl shadow-slate-200/50 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="border-b border-slate-100 px-3 py-3">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {user?.name ?? "Usuario"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {user?.email ?? ""}
-                      </p>
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/40 focus-visible:ring-offset-2"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 via-emerald-500 to-blue-500 text-sm font-bold text-white shadow-sm">
+                      {initials}
                     </div>
-                    <div className="border-t border-slate-100 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          logout();
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={1.5}
+                  </button>
+
+                  {userMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-64 origin-top-right rounded-xl border border-slate-200/80 bg-white p-2 shadow-xl shadow-slate-200/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="border-b border-slate-100 px-3 py-3">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {user?.name ?? "Usuario"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {user?.email ?? ""}
+                        </p>
+                      </div>
+                      <div className="border-t border-slate-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            logout();
+                          }}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
-                          />
-                        </svg>
-                        Cerrar sesión
-                      </button>
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                            />
+                          </svg>
+                          Cerrar sesión
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </>
           )}

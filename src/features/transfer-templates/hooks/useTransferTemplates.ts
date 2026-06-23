@@ -9,7 +9,13 @@ import type {
 } from "../types/transfer.types";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
-export function useTransferTemplates() {
+type UseTransferTemplatesOptions = {
+  /** No muestra toast en fallos de carga (p. ej. campana del header). */
+  silent?: boolean;
+};
+
+export function useTransferTemplates(options?: UseTransferTemplatesOptions) {
+  const silent = options?.silent ?? false;
   const [templates, setTemplates] = useState<TransferTemplate[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,9 +25,19 @@ export function useTransferTemplates() {
       const data = await TransferTemplatesService.getAll();
       setTemplates(data);
     } catch (error) {
-      console.error("Error loading transfer templates:", error);
       setTemplates([]);
-      toast.error("Error al cargar las transferencias recurrentes");
+      const isNetworkError =
+        isApiError(error) && (error.statusCode === 0 || error.error === "Network");
+      if (!silent || !isNetworkError) {
+        console.error("Error loading transfer templates:", error);
+      }
+      if (!silent) {
+        if (isApiError(error)) {
+          getErrorMessages(error).forEach((msg) => toast.error(msg));
+        } else {
+          toast.error("Error al cargar las transferencias recurrentes");
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -106,6 +122,24 @@ export function useTransferTemplates() {
     }
   }
 
+  async function remove(id: string): Promise<boolean> {
+    try {
+      setLoading(true);
+      await TransferTemplatesService.remove(id);
+      await load();
+      toast.success("Plantilla eliminada");
+      return true;
+    } catch (error) {
+      if (isApiError(error)) {
+        getErrorMessages(error).forEach((msg) => toast.error(msg));
+      } else {
+        toast.error("Error al eliminar la plantilla");
+      }
+      setLoading(false);
+      return false;
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -118,6 +152,7 @@ export function useTransferTemplates() {
     update,
     toggleActive,
     execute,
+    remove,
   };
 }
 

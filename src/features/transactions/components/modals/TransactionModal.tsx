@@ -15,7 +15,11 @@ import type { TransferFrequency, TransferRecurrenceType } from "@/features/trans
 interface TransactionModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (payload: CreateTransactionDto, editingId?: string) => void;
+  onSubmit: (
+    payload: CreateTransactionDto,
+    editingId?: string,
+    options?: { keepOpen?: boolean }
+  ) => void | Promise<boolean | void>;
   onSubmitRecurring?: (payload: {
     amount: number;
     fromAccountId: string;
@@ -73,6 +77,7 @@ export default function TransactionModal({
     "days" | "weeks" | "months" | "years"
   >("years");
   const [dayOfMonth, setDayOfMonth] = useState<number>(1);
+  const [keepOpenAfterSave, setKeepOpenAfterSave] = useState(false);
 
   useEffect(() => {
     if (editData) {
@@ -161,6 +166,15 @@ export default function TransactionModal({
     });
   };
 
+  const resetFormForNextTransaction = () => {
+    setForm((prev) => ({
+      ...prev,
+      amount: null,
+      description: "",
+    }));
+    setFiles([]);
+  };
+
   return (
     <Modal
       open={open}
@@ -183,7 +197,7 @@ export default function TransactionModal({
         )}
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
 
             const amount = Number(form.amount);
@@ -242,7 +256,7 @@ export default function TransactionModal({
                 files,
               };
 
-              onSubmitRecurring(payload);
+              await onSubmitRecurring(payload);
               return;
             }
 
@@ -250,7 +264,7 @@ export default function TransactionModal({
               categories.find((c) => c.id === form.category)?.name ??
               form.category;
 
-            onSubmit(
+            const submitResult = await onSubmit(
               {
                 ...form,
                 category: categoryName,
@@ -259,8 +273,14 @@ export default function TransactionModal({
                 files,
                 type: form.type as CreateTransactionDto["type"],
               },
-              editData?.id
+              editData?.id,
+              { keepOpen: keepOpenAfterSave && !editData }
             );
+
+            const success = submitResult !== false;
+            if (success && keepOpenAfterSave && !editData) {
+              resetFormForNextTransaction();
+            }
           }}
           className="space-y-4"
         >
@@ -559,7 +579,22 @@ export default function TransactionModal({
         />
       </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end sm:gap-3">
+      <div className="space-y-3 border-t border-border pt-4">
+        {!editData && (
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={keepOpenAfterSave}
+              onChange={(e) => setKeepOpenAfterSave(e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-emerald-600"
+            />
+            <span className="text-sm text-muted-foreground">
+              Guardar y dejar este formulario abierto para agregar otra
+            </span>
+          </label>
+        )}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
         <Button
           onClick={onClose}
           variant="outline"
@@ -572,8 +607,13 @@ export default function TransactionModal({
           variant="default"
           className="w-full rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 sm:w-auto"
         >
-          Guardar
+          {editData
+            ? "Guardar cambios"
+            : keepOpenAfterSave
+              ? "Guardar y agregar otra"
+              : "Guardar"}
         </Button>
+      </div>
       </div>
     </form>
       </div>

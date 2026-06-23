@@ -27,6 +27,7 @@ import {
   PencilSquareIcon,
   PauseIcon,
   PlayIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 const formatMoney = (value: number) =>
@@ -104,6 +105,7 @@ export default function TransferenciasPage() {
     update: updateTemplate,
     toggleActive,
     execute: executeTransfer,
+    remove: removeTemplate,
   } = useTransferTemplates();
 
   const { accounts } = useAccounts();
@@ -120,6 +122,7 @@ export default function TransferenciasPage() {
     null
   );
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const transferTemplateIds = useMemo(() => new Set(templates.map((t) => t.id)), [templates]);
   const transferTransactions = useMemo(() => {
@@ -291,6 +294,40 @@ export default function TransferenciasPage() {
             ) : (
               <PlayIcon className="size-4" />
             )}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={
+              confirmDeleteId === t.id
+                ? "text-red-600 hover:bg-red-50 hover:text-red-700"
+                : "text-muted-foreground hover:bg-red-50 hover:text-red-600"
+            }
+            title={
+              confirmDeleteId === t.id
+                ? "Confirmar eliminación"
+                : "Eliminar plantilla"
+            }
+            aria-label={
+              confirmDeleteId === t.id
+                ? "Confirmar eliminación"
+                : "Eliminar plantilla"
+            }
+            onBlur={() => setConfirmDeleteId(null)}
+            onClick={async () => {
+              if (confirmDeleteId !== t.id) {
+                setConfirmDeleteId(t.id);
+                return;
+              }
+
+              const ok = await removeTemplate(t.id);
+              if (ok) {
+                setConfirmDeleteId(null);
+              }
+            }}
+          >
+            <TrashIcon className="size-4" />
           </Button>
         </div>
       ),

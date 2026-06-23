@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCategories } from "@/features/categories/hooks/useCategories";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import { useBudgets } from "@/features/budgets/hooks/useBudgets";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import type { Category } from "@/features/categories/types/category.type";
@@ -148,8 +149,13 @@ export default function BudgetPage() {
       />
 
       <div className="mb-4 flex justify-end">
-        <Button onClick={() => setModalOpen(true)} variant="default" className="rounded-xl">
-          + Crear presupuesto
+        <Button
+          onClick={() => setModalOpen(true)}
+          variant="default"
+          className="inline-flex items-center gap-2 rounded-xl"
+        >
+          <Plus className="h-4 w-4 shrink-0" aria-hidden />
+          Crear presupuesto
         </Button>
       </div>
 

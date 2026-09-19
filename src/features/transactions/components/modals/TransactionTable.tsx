@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
 import { Transaction } from "../../types/transactions.types";
 import { FlowIconTransaction } from "../FlowIconTransaction";
@@ -18,6 +18,7 @@ export default function TransactionTable({
   items,
   loading,
   onShow,
+  onEdit,
   onDelete,
 }: TransactionTableProps) {
   const [page, setPage] = useState(1);
@@ -90,6 +91,16 @@ export default function TransactionTable({
           >
             Ver
           </button>
+          {onEdit && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-muted"
+              onClick={() => onEdit(item.id)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Editar
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"

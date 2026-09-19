@@ -24,32 +24,105 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Este proyecto incluye un `Dockerfile` multi-etapa que usa la salida `standalone` de Next.js para generar una imagen de producción liviana.
 
+### Variables de entorno: build vs. runtime
+
+Es **clave** entender esta diferencia para que la app funcione en Docker:
+
+- **`NEXT_PUBLIC_*`** (p. ej. `NEXT_PUBLIC_API_URL`) → se **inyectan en tiempo de build**
+  (`npm run build`) y quedan "horneadas" dentro del bundle de JavaScript del navegador.
+  Hay que pasarlas como **build arg** con `--build-arg`. Pasarlas solo con `--env-file`
+  o `-e` en el `run` **NO** funciona: quedarán como `undefined` (síntoma típico: peticiones
+  a `http://.../undefined/auth/login` que devuelven `404`).
+- **Variables solo de servidor** (p. ej. `NEXTAUTH_SECRET`, `PORT`) → se leen en
+  **tiempo de ejecución** y se pasan con `--env-file .env` o `-e` en el `run`.
+
 ### Construir la imagen
 
+Pasa la URL del backend como build arg (debe ser una IP/host accesible **desde el navegador**
+del usuario, no desde dentro del contenedor):
+
 ```bash
-docker build -t savvi-frontend .
+docker build \
+  --build-arg NEXT_PUBLIC_API_URL=http://192.168.1.11:4051 \
+  -t savvi-frontend .
 ```
 
 ### Ejecutar el contenedor
 
 ```bash
-docker run -p 3000:3000 savvi-frontend
+docker run -d --name savvi-frontend --restart unless-stopped -p 4050:3000 --env-file .env savvi-frontend
 ```
 
-Luego abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+Esto deja el contenedor corriendo en segundo plano (`-d`), lo reinicia automáticamente
+salvo que se detenga manualmente (`--restart unless-stopped`), expone la app en el
+puerto `4050` del host (mapeado al `3000` interno) y carga las variables de servidor del archivo `.env`.
 
-### Variables de entorno
+Luego abre [http://localhost:4050](http://localhost:4050) en tu navegador.
 
-Puedes pasar variables de entorno en tiempo de ejecución con `-e` o un archivo `.env`:
-
-```bash
-docker run -p 3000:3000 --env-file .env savvi-frontend
-```
-
-El puerto se puede cambiar con la variable `PORT` (por defecto `3000`):
+El puerto interno se puede cambiar con la variable `PORT` (por defecto `3000`):
 
 ```bash
 docker run -p 8080:8080 -e PORT=8080 savvi-frontend
+```
+
+### Detener, eliminar y reiniciar el contenedor
+
+Comandos básicos de gestión:
+
+```bash
+# Detener el contenedor
+docker stop savvi-frontend
+
+# Iniciar de nuevo un contenedor ya existente (sin recrearlo)
+docker start savvi-frontend
+
+# Reiniciar el contenedor
+docker restart savvi-frontend
+
+# Eliminar el contenedor (debe estar detenido)
+docker rm savvi-frontend
+
+# Detener y eliminar en un solo paso (forzado)
+docker rm -f savvi-frontend
+```
+
+### Aplicar cambios en las variables de entorno
+
+- Si cambiaste una variable **de servidor** (`NEXTAUTH_SECRET`, `PORT`, …): basta con
+  recrear el contenedor, ya que el `.env` se lee solo al crearlo (un `restart` **no** toma
+  los nuevos valores):
+
+  ```bash
+  docker rm -f savvi-frontend
+  docker run -d --name savvi-frontend --restart unless-stopped -p 4050:3000 --env-file .env savvi-frontend
+  ```
+
+- Si cambiaste una variable **`NEXT_PUBLIC_*`** (como `NEXT_PUBLIC_API_URL`): debes
+  **reconstruir la imagen** con el nuevo `--build-arg` y luego recrear el contenedor
+  (ver siguiente sección). Recrear el contenedor por sí solo no basta.
+
+### Traer nuevos cambios del código
+
+Cuando hagas `git pull` con cambios de código, hay que reconstruir la imagen y recrear
+el contenedor:
+
+```bash
+git pull
+docker build \
+  --build-arg NEXT_PUBLIC_API_URL=http://192.168.1.11:4051 \
+  -t savvi-frontend .
+docker rm -f savvi-frontend
+docker run -d --name savvi-frontend --restart unless-stopped -p 4050:3000 --env-file .env savvi-frontend
+```
+
+### Ver logs y estado
+
+```bash
+# Ver el estado del contenedor
+docker ps -a --filter name=savvi-frontend
+
+# Seguir los logs en tiempo real
+docker logs -f savvi-frontend
 ```
 
 ## Learn More

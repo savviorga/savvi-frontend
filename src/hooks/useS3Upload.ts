@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { getJsonAuthHeaders } from "@/lib/api-auth";
 import { getPublicApiUrl } from "@/lib/public-api-url";
 import type { ApiError } from "@/types/api-error.type";
+import { validateDocumentFile } from "@/lib/document-constraints";
 
 export interface UploadProgress {
   fileName: string;
@@ -24,34 +25,6 @@ interface PresignedUrlResponse {
 }
 
 const MAX_RETRIES = 2;
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-
-const ALLOWED_TYPES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/jpg",
-  "image/webp",
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/webm",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/x-m4a",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-];
-
-function validateFile(file: File): string | null {
-  if (file.size > MAX_FILE_SIZE) {
-    return `${file.name} excede el tamaño máximo de ${MAX_FILE_SIZE / 1024 / 1024} MB`;
-  }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return `${file.name}: tipo de archivo no permitido (${file.type || "desconocido"})`;
-  }
-  return null;
-}
 
 async function requestPresignedUrl(
   file: File,
@@ -204,7 +177,7 @@ export function useS3Upload() {
   const uploadFiles = useCallback(
     async (files: File[], folder: string): Promise<S3UploadResult[]> => {
       const validationErrors = files
-        .map(validateFile)
+        .map(validateDocumentFile)
         .filter((e): e is string => e !== null);
 
       if (validationErrors.length > 0) {

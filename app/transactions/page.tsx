@@ -10,7 +10,7 @@ import TransactionTable from "@/features/transactions/components/modals/Transact
 import TransactionModal from "@/features/transactions/components/modals/TransactionModal";
 import ReportTransactions from "@/features/transactions/components/ReportTransactions";
 
-import { Transaction, CreateTransactionDto } from "@/features/transactions/types/transactions.types";
+import { Transaction, TransactionFormPayload } from "@/features/transactions/types/transactions.types";
 
 import { useCategories } from '@/features/categories/hooks/useCategories';
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
@@ -37,8 +37,11 @@ export default function TransactionsPage() {
     loading: loadingTransactions,
     remove,
     create,
+    update,
     show,
     reload,
+    isUploading,
+    uploadTotalPercent,
   } = useTransactions();
   const { categories } = useCategories();
   const { accounts } = useAccounts();
@@ -96,11 +99,15 @@ export default function TransactionsPage() {
   );
 
   const handleSubmit = async (
-    payload: CreateTransactionDto,
-    _editingId?: string,
+    payload: TransactionFormPayload,
+    editingId?: string,
     options?: { keepOpen?: boolean }
   ) => {
-    const success = await create(payload);
+    // En edición el mismo guardado manda campos, adjuntos a borrar y archivos nuevos.
+    const success = editingId
+      ? await update(editingId, payload)
+      : await create(payload);
+
     if (success) {
       if (!options?.keepOpen) {
         setModalOpen(false);
@@ -178,6 +185,13 @@ export default function TransactionsPage() {
   const handleClose = () => {
     setModalOpen(false);
     setEditData(null);
+  };
+
+  const handleEdit = (id: string) => {
+    const tx = transactions.find((t) => t.id === id);
+    if (!tx) return;
+    setEditData(tx);
+    setModalOpen(true);
   };
 
   const handleShow = async (id: string) => {
@@ -260,13 +274,7 @@ export default function TransactionsPage() {
             }
             loading={loadingTransactions}
             onDelete={handleDelete}
-            onEdit={(id) => {
-              const tx = transactions.find((t) => t.id === id);
-              if (tx) {
-                setEditData(tx);
-                setModalOpen(true);
-              }
-            }}
+            onEdit={handleEdit}
             onShow={handleShow}
           />
         </>
@@ -283,6 +291,8 @@ export default function TransactionsPage() {
         categories={categories}
         accounts={accounts}
         loading={loadingTransactions}
+        uploading={isUploading}
+        uploadPercent={uploadTotalPercent}
       />
 
       <ViewModal
@@ -291,6 +301,7 @@ export default function TransactionsPage() {
         data={viewData}
         accounts={accounts}
         onDelete={handleDelete}
+        onEdit={handleEdit}
       />
     </>
   );

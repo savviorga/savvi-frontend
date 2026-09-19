@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { TransactionService } from "../services/transaction.service";
-import { Transaction, CreateTransactionDto } from "../types/transactions.types";
+import {
+  Transaction,
+  CreateTransactionDto,
+  TransactionFormPayload,
+  UploadedFileRef,
+} from "../types/transactions.types";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 import { useS3Upload } from "@/hooks/useS3Upload";
 
@@ -12,6 +17,15 @@ function sortTransactionsNewestFirst(list: Transaction[]): Transaction[] {
     if (byDate !== 0) return byDate;
     return b.id.localeCompare(a.id);
   });
+}
+
+function notifyError(error: unknown, fallback: string) {
+  if (isApiError(error)) {
+    getErrorMessages(error).forEach((msg) => toast.error(msg));
+  } else {
+    const msg = error instanceof Error ? error.message : fallback;
+    toast.error(msg);
+  }
 }
 
 export function useTransactions() {
@@ -44,17 +58,10 @@ export function useTransactions() {
           await TransactionService.confirmUpload(transaction.id, results);
         } catch (uploadErr) {
           console.error("[useTransactions] Error en subida de archivos:", uploadErr);
-          if (isApiError(uploadErr)) {
-            getErrorMessages(uploadErr).forEach((msg) =>
-              toast.error(msg),
-            );
-          } else {
-            const msg =
-              uploadErr instanceof Error
-                ? uploadErr.message
-                : "La transacción se guardó pero falló la subida de archivos.";
-            toast.error(msg);
-          }
+          notifyError(
+            uploadErr,
+            "La transacción se guardó pero falló la subida de archivos.",
+          );
           await load();
           setLoading(false);
           return false;
@@ -64,30 +71,53 @@ export function useTransactions() {
       toast.success("Transacción creada exitosamente");
       return true;
     } catch (error) {
-      if (isApiError(error)) {
-        const messages = getErrorMessages(error);
-        messages.forEach((msg) => toast.error(msg));
-      } else {
-        toast.error("Error al crear la transacción");
-      }
+      notifyError(error, "Error al crear la transacción");
       setLoading(false);
       return false;
     }
   }
 
-  async function update(id: string, payload: Partial<CreateTransactionDto>): Promise<boolean> {
+  /**
+   * Edición completa: campos + adjuntos. Los archivos nuevos se suben a S3 antes
+   * del PATCH y viajan como `filesToAdd`, junto con los `documentsToDelete`
+   * marcados en el formulario, para que todo se aplique en una sola petición.
+   */
+  async function update(
+    id: string,
+    payload: Partial<TransactionFormPayload>,
+  ): Promise<boolean> {
+    const { files, documentsToDelete, ...fields } = payload;
+
+    setLoading(true);
+
+    let filesToAdd: UploadedFileRef[] = [];
+    if (files?.length) {
+      try {
+        filesToAdd = await s3Upload.uploadFiles(files, `transactions/${id}`);
+      } catch (uploadErr) {
+        console.error("[useTransactions] Error en subida de archivos:", uploadErr);
+        notifyError(uploadErr, "No se pudieron subir los archivos nuevos.");
+        setLoading(false);
+        return false;
+      }
+    }
+
     try {
-      setLoading(true);
-      await TransactionService.update(id, payload);
+      await TransactionService.update(id, {
+        ...fields,
+        ...(documentsToDelete?.length ? { documentsToDelete } : {}),
+        ...(filesToAdd.length ? { filesToAdd } : {}),
+      });
       await load();
       toast.success("Transacción actualizada exitosamente");
       return true;
     } catch (error) {
-      if (isApiError(error)) {
-        const messages = getErrorMessages(error);
-        messages.forEach((msg) => toast.error(msg));
-      } else {
-        toast.error("Error al actualizar la transacción");
+      notifyError(error, "Error al actualizar la transacción");
+      if (filesToAdd.length) {
+        // Las keys ya están en S3: reintentar solo el guardado las vincula.
+        toast.error(
+          "Los archivos ya se subieron pero no quedaron vinculados: vuelve a guardar.",
+        );
       }
       setLoading(false);
       return false;
@@ -99,31 +129,25 @@ export function useTransactions() {
       const transaction = await TransactionService.getById(id);
       return transaction;
     } catch (error) {
-      if (isApiError(error)) {
-        const messages = getErrorMessages(error);
-        messages.forEach((msg) => toast.error(msg));
-      } else {
-        toast.error("Error al obtener la transacción");
-      }
+      notifyError(error, "Error al obtener la transacción");
       return null;
     }
   }
 
   async function remove(id: string): Promise<boolean> {
     try {
-      await TransactionService.remove(id);
+      const result = await TransactionService.remove(id);
       setTransactions((prev) =>
         sortTransactionsNewestFirst(prev.filter((t) => t.id !== id))
       );
-      toast.success("Transacción eliminada exitosamente");
+      toast.success(
+        result?.deletedDocuments
+          ? `Transacción eliminada junto con ${result.deletedDocuments} archivo(s)`
+          : "Transacción eliminada exitosamente",
+      );
       return true;
     } catch (error) {
-      if (isApiError(error)) {
-        const messages = getErrorMessages(error);
-        messages.forEach((msg) => toast.error(msg));
-      } else {
-        toast.error("Error al eliminar la transacción");
-      }
+      notifyError(error, "Error al eliminar la transacción");
       return false;
     }
   }
@@ -136,12 +160,7 @@ export function useTransactions() {
       toast.success(`${items.length} transacciones creadas exitosamente`);
       return true;
     } catch (error) {
-      if (isApiError(error)) {
-        const messages = getErrorMessages(error);
-        messages.forEach((msg) => toast.error(msg));
-      } else {
-        toast.error("Error al crear las transacciones");
-      }
+      notifyError(error, "Error al crear las transacciones");
       setLoading(false);
       return false;
     }

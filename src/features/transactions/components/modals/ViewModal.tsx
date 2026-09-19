@@ -1,19 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Eye } from "lucide-react";
 import FileList from "@/components/File/FileList";
 import Modal from "@/components/Modal/Modal";
-import { getBearerAuthHeaders } from "@/lib/api-auth";
 import { FlowIconTransaction } from "../FlowIconTransaction";
 import { Button } from "@/components/ui/shadcn-button";
-
-type DocumentItem = {
-  id: string;
-  name: string;
-  url: string;
-  size: number;
-};
+import { useTransactionDocuments } from "../../hooks/useTransactionDocuments";
 
 function Info({
   label,
@@ -53,53 +46,29 @@ export default function ViewModal({
   onClose,
   data,
   onDelete,
+  onEdit,
   accounts,
 }: {
   open: boolean;
   onClose: () => void;
   data: any | null;
   onDelete?: (id: string) => void;
+  onEdit?: (id: string) => void;
   accounts?: { id: string; name: string }[];
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [files, setFiles] = useState<DocumentItem[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(false);
+  /** Adjunto pendiente de confirmar borrado (el borrado aquí es inmediato). */
+  const [documentToDelete, setDocumentToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
-  useEffect(() => {
-    if (!open || !data?.id) return;
-
-    const controller = new AbortController();
-
-    const fetchDocuments = async () => {
-      try {
-        setLoadingFiles(true);
-
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/transactions/${data.id}/documents`,
-          {
-            signal: controller.signal,
-            headers: getBearerAuthHeaders(),
-          },
-        );
-
-        if (!res.ok) throw new Error();
-
-        const docs = await res.json();
-        setFiles(docs);
-      } catch (error: any) {
-        if (error.name !== "AbortError") {
-          console.error("Error cargando documentos", error);
-          setFiles([]);
-        }
-      } finally {
-        setLoadingFiles(false);
-      }
-    };
-
-    fetchDocuments();
-
-    return () => controller.abort();
-  }, [open, data?.id]);
+  const {
+    documents,
+    loading: loadingFiles,
+    deletingId,
+    removeDocument,
+  } = useTransactionDocuments(data?.id, open && Boolean(data?.id));
 
   if (!data) return null;
 
@@ -155,18 +124,36 @@ export default function ViewModal({
         </div>
 
         <div className="mb-6">
+          <p className="text-sm font-semibold text-foreground">Documentos</p>
           {loadingFiles ? (
-            <p className="text-sm text-muted-foreground">Cargando archivos…</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Cargando archivos…
+            </p>
+          ) : documents.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Esta transacción no tiene archivos adjuntos.
+            </p>
+          ) : (
+            <FileList
+              files={documents.map((doc) => ({
+                name: doc.name,
+                size: doc.size,
+                url: doc.url,
+              }))}
+              onRemove={(index) => {
+                const doc = documents[index];
+                if (doc) setDocumentToDelete({ id: doc.id, name: doc.name });
+              }}
+            />
+          )}
+          {deletingId ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Eliminando archivo…
+            </p>
           ) : null}
-          <FileList
-            files={files}
-            onRemove={(index) =>
-              setFiles((current) => current.filter((_, i) => i !== index))
-            }
-          />
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
           {onDelete ? (
             <Button
               type="button"
@@ -177,8 +164,60 @@ export default function ViewModal({
               Eliminar
             </Button>
           ) : null}
+          {onEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => {
+                onClose();
+                onEdit(data.id);
+              }}
+            >
+              Editar
+            </Button>
+          ) : null}
           <Button type="button" variant="default" className="rounded-xl" onClick={onClose}>
             Cerrar
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(documentToDelete)}
+        onOpenChange={(next) => {
+          if (!next) setDocumentToDelete(null);
+        }}
+        title="¿Eliminar archivo?"
+        description={
+          documentToDelete
+            ? `"${documentToDelete.name}" se borrará definitivamente del almacenamiento.`
+            : undefined
+        }
+        className="max-w-sm"
+        headerIcon={null}
+      >
+        <div className="flex justify-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl"
+            onClick={() => setDocumentToDelete(null)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            className="rounded-xl"
+            disabled={Boolean(deletingId)}
+            onClick={async () => {
+              const target = documentToDelete;
+              setDocumentToDelete(null);
+              if (target) await removeDocument(target.id);
+            }}
+          >
+            Eliminar
           </Button>
         </div>
       </Modal>

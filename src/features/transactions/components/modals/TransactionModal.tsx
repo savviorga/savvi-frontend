@@ -1,22 +1,40 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Receipt } from "lucide-react";
+import { Receipt, RotateCcw } from "lucide-react";
 import FileUploader from "@/components/File/FileUploader";
 import FileList from "@/components/File/FileList";
 import Modal from "@/components/Modal/Modal";
 import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
-import { CreateTransactionDto, Transaction } from "../../types/transactions.types";
+import { ProgressBar } from "@/components/ProgressBar";
+import {
+  CreateTransactionDto,
+  Transaction,
+  TransactionFormPayload,
+} from "../../types/transactions.types";
 import { Account, Category } from "../../types/catalog.types";
 import { Button } from "@/components/ui/shadcn-button";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
+import { useTransactionDocuments } from "../../hooks/useTransactionDocuments";
+import {
+  clearTransactionDefaults,
+  loadTransactionDefaults,
+  resolveTransactionDefaults,
+  saveTransactionDefaults,
+} from "../../utils/transactionDefaults";
+import {
+  DOCUMENT_ACCEPT,
+  MAX_DOCUMENTS_PER_REQUEST,
+  MAX_DOCUMENTS_TO_DELETE,
+  MAX_DOCUMENT_SIZE,
+} from "@/lib/document-constraints";
 
 interface TransactionModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (
-    payload: CreateTransactionDto,
+    payload: TransactionFormPayload,
     editingId?: string,
     options?: { keepOpen?: boolean }
   ) => void | Promise<boolean | void>;
@@ -40,6 +58,10 @@ interface TransactionModalProps {
   categories: Category[];
   accounts: Account[];
   loading: boolean;
+  /** Subida de adjuntos a S3 en curso (bloquea el guardado y muestra el avance). */
+  uploading?: boolean;
+  /** Avance total de la subida, 0–100. */
+  uploadPercent?: number;
 }
 
 export default function TransactionModal({
@@ -51,6 +73,8 @@ export default function TransactionModal({
   categories,
   accounts,
   loading,
+  uploading = false,
+  uploadPercent = 0,
 }: TransactionModalProps) {
   const [form, setForm] = useState({
     date: "",
@@ -60,9 +84,37 @@ export default function TransactionModal({
     account: "",
     description: "",
   });
-  // En el flujo actual los archivos precargados están deshabilitados,
-  // por lo que trabajamos únicamente con File[].
+  /** Archivos nuevos: se suben a S3 al guardar y viajan como `filesToAdd`. */
   const [files, setFiles] = useState<File[]>([]);
+  /** Adjuntos marcados para borrar; se envían en `documentsToDelete` al guardar. */
+  const [documentsToDelete, setDocumentsToDelete] = useState<string[]>([]);
+
+  // Los adjuntos pendientes se reinician al abrir/cerrar o al cambiar de transacción.
+  // Se ajusta en render (y no en un efecto sobre el mismo `useEffect` del formulario)
+  // para no perder lo que el usuario arrastró cuando llegan los catálogos.
+  const attachmentsKey = `${open ? "open" : "closed"}:${editData?.id ?? "new"}`;
+  const [lastAttachmentsKey, setLastAttachmentsKey] = useState(attachmentsKey);
+  if (lastAttachmentsKey !== attachmentsKey) {
+    setLastAttachmentsKey(attachmentsKey);
+    setFiles([]);
+    setDocumentsToDelete([]);
+  }
+
+  // Adjuntos ya guardados (solo en edición). Las URLs caducan en 1 h, así que se
+  // piden cada vez que se abre el modal.
+  const {
+    documents: savedDocuments,
+    loading: loadingDocuments,
+  } = useTransactionDocuments(editData?.id, open && Boolean(editData?.id));
+
+  const keptDocuments = useMemo(
+    () => savedDocuments.filter((doc) => !documentsToDelete.includes(doc.id)),
+    [savedDocuments, documentsToDelete],
+  );
+  const markedDocuments = useMemo(
+    () => savedDocuments.filter((doc) => documentsToDelete.includes(doc.id)),
+    [savedDocuments, documentsToDelete],
+  );
 
   const [recurringEnabled, setRecurringEnabled] = useState(false);
   const [payeeName, setPayeeName] = useState("");
@@ -78,6 +130,8 @@ export default function TransactionModal({
   >("years");
   const [dayOfMonth, setDayOfMonth] = useState<number>(1);
   const [keepOpenAfterSave, setKeepOpenAfterSave] = useState(false);
+  /** El formulario de creación se abrió con los datos de la última transacción. */
+  const [prefilled, setPrefilled] = useState(false);
 
   useEffect(() => {
     if (editData) {
@@ -87,6 +141,7 @@ export default function TransactionModal({
         categories.find((c) => c.name === rawCat)?.id ??
         "";
 
+      setPrefilled(false);
       setForm({
         date: editData.date?.slice(0, 10) ?? "",
         type: editData.type,
@@ -107,12 +162,28 @@ export default function TransactionModal({
       setCustomIntervalUnit("years");
       setDayOfMonth(1);
     } else {
+      // Creación: se reponen fecha, tipo, cuenta y categoría del último registro
+      // (monto y descripción siempre en blanco).
+      const defaults = resolveTransactionDefaults(
+        loadTransactionDefaults(),
+        accounts,
+        categories,
+      );
+      setPrefilled(
+        Boolean(
+          defaults.date ||
+            defaults.type ||
+            defaults.account ||
+            defaults.category,
+        ),
+      );
+
       setForm({
-        date: "",
-        type: "",
+        date: defaults.date,
+        type: defaults.type,
         amount: null as number | null,
-        category: "",
-        account: "",
+        category: defaults.category,
+        account: defaults.account,
         description: "",
       });
 
@@ -127,8 +198,15 @@ export default function TransactionModal({
       setDayOfMonth(1);
     }
 
-    // setFiles(preloadedFiles);
-  }, [editData, open, categories]);
+  }, [editData, open, categories, accounts]);
+
+  const markDocumentForDelete = (documentId: string) =>
+    setDocumentsToDelete((prev) =>
+      prev.includes(documentId) ? prev : [...prev, documentId],
+    );
+
+  const restoreDocument = (documentId: string) =>
+    setDocumentsToDelete((prev) => prev.filter((id) => id !== documentId));
 
   function customIntervalToDays(amount: number, unit: typeof customIntervalUnit): number {
     const n = Math.max(1, Math.floor(Number(amount)) || 1);
@@ -166,6 +244,20 @@ export default function TransactionModal({
     });
   };
 
+  /** Vacía el formulario y olvida el contexto recordado hasta el próximo guardado. */
+  const clearPrefill = () => {
+    clearTransactionDefaults();
+    setPrefilled(false);
+    setForm({
+      date: "",
+      type: "",
+      amount: null,
+      category: "",
+      account: "",
+      description: "",
+    });
+  };
+
   const resetFormForNextTransaction = () => {
     setForm((prev) => ({
       ...prev,
@@ -173,6 +265,7 @@ export default function TransactionModal({
       description: "",
     }));
     setFiles([]);
+    setDocumentsToDelete([]);
   };
 
   return (
@@ -189,10 +282,16 @@ export default function TransactionModal({
       }
     >
       <div className="relative">
-        {loading && (
+        {(loading || uploading) && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
-            <span className="text-sm text-muted-foreground">Cargando…</span>
+            {uploading ? (
+              <div className="w-64 max-w-[80%]">
+                <ProgressBar label="Subiendo archivos…" value={uploadPercent} />
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">Cargando…</span>
+            )}
           </div>
         )}
 
@@ -260,6 +359,19 @@ export default function TransactionModal({
               return;
             }
 
+            if (files.length > MAX_DOCUMENTS_PER_REQUEST) {
+              toast.error(
+                `Máximo ${MAX_DOCUMENTS_PER_REQUEST} archivos nuevos por guardado`,
+              );
+              return;
+            }
+            if (documentsToDelete.length > MAX_DOCUMENTS_TO_DELETE) {
+              toast.error(
+                `Máximo ${MAX_DOCUMENTS_TO_DELETE} adjuntos a eliminar por guardado`,
+              );
+              return;
+            }
+
             const categoryName =
               categories.find((c) => c.id === form.category)?.name ??
               form.category;
@@ -271,6 +383,7 @@ export default function TransactionModal({
                 amount,
                 description,
                 files,
+                ...(documentsToDelete.length ? { documentsToDelete } : {}),
                 type: form.type as CreateTransactionDto["type"],
               },
               editData?.id,
@@ -278,12 +391,38 @@ export default function TransactionModal({
             );
 
             const success = submitResult !== false;
+
+            if (success && !editData) {
+              // El próximo "crear transacción" arranca con este mismo contexto.
+              saveTransactionDefaults({
+                date: form.date,
+                type: form.type,
+                account: form.account,
+                category: form.category,
+              });
+            }
+
             if (success && keepOpenAfterSave && !editData) {
               resetFormForNextTransaction();
             }
           }}
           className="space-y-4"
         >
+          {!editData && prefilled && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                Datos de tu última transacción. Revisa la fecha antes de guardar.
+              </p>
+              <button
+                type="button"
+                onClick={clearPrefill}
+                className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-foreground transition hover:bg-white/60"
+              >
+                Limpiar
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <SavvyDatePicker
@@ -553,24 +692,77 @@ export default function TransactionModal({
       )}
 
       <div className="space-y-3 border-t border-border pt-4">
-        <p className="text-sm font-semibold text-foreground">Subir Documentos</p>
+        <p className="text-sm font-semibold text-foreground">Documentos</p>
+
+        {/* Adjuntos ya guardados: se marcan para borrar y se eliminan al guardar,
+            así cancelar la edición no pierde archivos. */}
+        {editData && (
+          <div className="space-y-2">
+            {loadingDocuments ? (
+              <p className="text-sm text-muted-foreground">
+                Cargando archivos adjuntos…
+              </p>
+            ) : savedDocuments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Esta transacción no tiene archivos adjuntos.
+              </p>
+            ) : null}
+
+            {keptDocuments.length > 0 && (
+              <FileList
+                files={keptDocuments.map((doc) => ({
+                  name: doc.name,
+                  size: doc.size,
+                  url: doc.url,
+                }))}
+                onRemove={(index) =>
+                  markDocumentForDelete(keptDocuments[index].id)
+                }
+              />
+            )}
+
+            {markedDocuments.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-700">
+                  {markedDocuments.length} archivo(s) se eliminarán al guardar
+                </p>
+                <ul className="space-y-1">
+                  {markedDocuments.map((doc) => (
+                    <li
+                      key={doc.id}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm text-red-700 line-through">
+                        {doc.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => restoreDocument(doc.id)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-100"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                        Restaurar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         <FileUploader
-          maxFiles={5}
-          maxSize={10 * 1024 * 1024}
-          accept={{
-            "application/pdf": [".pdf"],
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-              [".docx"],
-            "image/*": [".jpg", ".jpeg", ".png"],
-          }}
-          label="Arrastra aquí tus PDFs, DOCX o imágenes"
+          maxFiles={MAX_DOCUMENTS_PER_REQUEST}
+          maxSize={MAX_DOCUMENT_SIZE}
+          accept={DOCUMENT_ACCEPT}
+          label="Arrastra aquí tus PDFs, DOCX, imágenes o audios"
+          disabled={uploading}
           onFilesChange={(newFiles) =>
             setFiles((prev) => [...prev, ...newFiles])
           }
         />
 
-        {/* Mostrar archivos seleccionados */}
+        {/* Archivos nuevos pendientes de subir */}
         <FileList
           files={files}
           onRemove={(index) =>
@@ -596,6 +788,7 @@ export default function TransactionModal({
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
         <Button
+          type="button"
           onClick={onClose}
           variant="outline"
           className="w-full rounded-lg border-slate-200 font-normal text-foreground hover:bg-slate-50 sm:w-auto"
@@ -605,13 +798,16 @@ export default function TransactionModal({
         <Button
           type="submit"
           variant="default"
-          className="w-full rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 sm:w-auto"
+          disabled={loading || uploading}
+          className="w-full rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {editData
-            ? "Guardar cambios"
-            : keepOpenAfterSave
-              ? "Guardar y agregar otra"
-              : "Guardar"}
+          {uploading
+            ? "Subiendo archivos…"
+            : editData
+              ? "Guardar cambios"
+              : keepOpenAfterSave
+                ? "Guardar y agregar otra"
+                : "Guardar"}
         </Button>
       </div>
       </div>

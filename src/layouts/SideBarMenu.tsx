@@ -13,13 +13,30 @@ import {
   TagIcon,
   ArrowsRightLeftIcon,
   BuildingLibraryIcon,
+  ChartBarSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 /** Fondo sidebar (referencia diseño oscuro) */
 const SIDEBAR_BG = "#0A1622";
 
-const menuItems = [
+/**
+ * Analítica es una app aparte. Va con prefijo NEXT_PUBLIC_ porque este menú corre en
+ * el navegador (una variable sin ese prefijo llegaría como `undefined` al bundle) y
+ * se inyecta en tiempo de build. Sin configurar, apunta al puerto local por defecto.
+ */
+const ANALITICA_URL =
+  process.env.NEXT_PUBLIC_URL_ANALITICA?.trim() || "http://localhost:3002";
+
+type MenuItem = {
+  href: string;
+  label: string;
+  icon: typeof HomeIcon;
+  /** Enlace a otra aplicación: no se marca como activo por la ruta actual. */
+  external?: boolean;
+};
+
+const menuItems: MenuItem[] = [
   {
     href: "/dashboard",
     label: "Dashboard",
@@ -60,7 +77,13 @@ const menuItems = [
     label: "Savvi IA",
     icon: ChatBubbleLeftRightIcon,
   },
-] as const;
+  {
+    href: ANALITICA_URL,
+    label: "Analítica",
+    icon: ChartBarSquareIcon,
+    external: true,
+  },
+];
 
 function initialsFromName(name: string | undefined): string {
   if (!name?.trim()) return "?";
@@ -142,19 +165,18 @@ export default function SideBarMenu() {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive =
-            pathname === item.href ||
-            pathname.startsWith(`${item.href}/`);
+            !item.external &&
+            (pathname === item.href ||
+              pathname.startsWith(`${item.href}/`));
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors duration-200 ${
-                isActive
-                  ? "bg-mint/15 text-mint shadow-sm ring-1 ring-mint/20"
-                  : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-              }`}
-            >
+          const linkClassName = `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors duration-200 ${
+            isActive
+              ? "bg-mint/15 text-mint shadow-sm ring-1 ring-mint/20"
+              : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+          }`;
+
+          const content = (
+            <>
               <Icon
                 className={`h-5 w-5 shrink-0 transition-colors ${
                   isActive ? "text-mint" : "text-slate-500 group-hover:text-slate-300"
@@ -162,6 +184,21 @@ export default function SideBarMenu() {
                 aria-hidden
               />
               {item.label}
+            </>
+          );
+
+          // Otra aplicación: navegación del navegador, no del router de Next.
+          if (item.external) {
+            return (
+              <a key={item.href} href={item.href} className={linkClassName}>
+                {content}
+              </a>
+            );
+          }
+
+          return (
+            <Link key={item.href} href={item.href} className={linkClassName}>
+              {content}
             </Link>
           );
         })}

@@ -34,6 +34,7 @@ savvi-frontend/
 │   ├── layout.tsx              # fuentes, AuthProvider, ToasterCustom, MainLayout
 │   ├── globals.css             # tokens de diseño (Tailwind v4)
 │   ├── api/auth/[...nextauth]/ # route handler de autenticación
+│   ├── api/ai/                 # route handlers de IA (la clave de OpenAI vive aquí)
 │   ├── dashboard/  transactions/  accounts/  categories/
 │   ├── budget/[id]/  planificador/  transferencias/  savvi-ia/
 │   └── login/  register/  list/
@@ -249,6 +250,30 @@ Prácticas aplicadas:
 
 ---
 
+## 9b. IA (OpenAI) en el servidor
+
+La transcripción de voz y la extracción de datos del formulario de transacciones
+pasan por route handlers de Next, nunca por el navegador:
+
+```
+VoiceRecorder (navegador)
+  → POST /api/ai/transcribe        audio → texto        (modelo de audio)
+  → POST /api/ai/parse-transaction texto → campos       (salida estructurada)
+      → SmartTransactionCapture vuelca en el formulario solo lo detectado
+```
+
+Reglas:
+
+- **`IA_APIKEY` no lleva prefijo `NEXT_PUBLIC_`**: si lo llevara, la clave quedaría
+  en el bundle del navegador y cualquiera podría usarla. Solo la leen los handlers
+  de `app/api/ai/**` a través de `src/lib/openai.ts`.
+- Todo handler de IA llama antes a `requireSession()` (`src/lib/ai-session.ts`):
+  exige `Authorization: Bearer` y lo valida contra el backend, para que nadie de
+  fuera consuma la cuenta de OpenAI.
+- El modelo solo puede elegir **ids existentes** de categorías y cuentas; la
+  respuesta se vuelve a validar en el servidor y se descarta lo que no cuadre.
+- Lo que no se deduce viaja como `null` y **no** se rellena con valores por defecto.
+
 ## 10. Estado y persistencia local
 
 - Estado de servidor: hooks de feature (no hay React Query ni store global).
@@ -260,6 +285,10 @@ Prácticas aplicadas:
 | --- | --- |
 | `savvi_auth` | sesión (usuario + token) |
 | `savvi_last_transaction` | prellenado del formulario de transacciones |
+
+Variables de entorno de cliente (`NEXT_PUBLIC_*`, horneadas en el build):
+`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_URL_ANALITICA`. Variables de servidor:
+`IA_APIKEY`, `IA_MODEL_AUDIO`, `IA_MODEL_TEXTO`, `NEXTAUTH_*`.
 
 ---
 

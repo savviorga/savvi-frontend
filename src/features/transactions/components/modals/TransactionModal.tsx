@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
   ArrowDownLeft,
@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
 import { useTransactionDocuments } from "../../hooks/useTransactionDocuments";
+import SmartTransactionCapture from "../SmartTransactionCapture";
+import type { DetectedTransaction } from "../../services/ai-transaction.service";
 import {
   clearTransactionDefaults,
   loadTransactionDefaults,
@@ -164,6 +166,7 @@ export default function TransactionModal({
   const [keepOpenAfterSave, setKeepOpenAfterSave] = useState(false);
   /** El formulario de creación se abrió con los datos de la última transacción. */
   const [prefilled, setPrefilled] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (editData) {
@@ -290,6 +293,23 @@ export default function TransactionModal({
     });
   };
 
+  /** Vuelca en el formulario solo los campos que la IA logró deducir. */
+  const applyDetected = (detected: DetectedTransaction) => {
+    setForm((f) => ({
+      ...f,
+      ...(detected.type ? { type: detected.type } : {}),
+      ...(detected.amount != null ? { amount: detected.amount } : {}),
+      ...(detected.date ? { date: detected.date } : {}),
+      ...(detected.accountId ? { account: detected.accountId } : {}),
+      ...(detected.categoryId ? { category: detected.categoryId } : {}),
+      ...(detected.description ? { description: detected.description } : {}),
+    }));
+    // El aviso de "última transacción" ya no describe lo que hay en pantalla.
+    setPrefilled(false);
+    // En móvil los campos quedan bajo el pliegue: se llevan a la vista para revisarlos.
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const resetFormForNextTransaction = () => {
     setForm((prev) => ({
       ...prev,
@@ -327,7 +347,19 @@ export default function TransactionModal({
           </div>
         )}
 
+        {!editData && (
+          <div className="mb-4">
+            <SmartTransactionCapture
+              categories={categories}
+              accounts={accounts}
+              onDetected={applyDetected}
+              disabled={loading || uploading}
+            />
+          </div>
+        )}
+
         <form
+          ref={formRef}
           onSubmit={async (e) => {
             e.preventDefault();
 
@@ -564,8 +596,8 @@ export default function TransactionModal({
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
               placeholder="Ej. Compra supermercado"
-              className="block w-full resize-none rounded-xl border border-border bg-white px-3 py-2.5 text-base transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 sm:text-sm"
-              rows={3}
+              className="block w-full resize-y rounded-xl border border-border bg-white px-3 py-2.5 text-base transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 sm:text-sm"
+              rows={4}
             />
           </div>
 

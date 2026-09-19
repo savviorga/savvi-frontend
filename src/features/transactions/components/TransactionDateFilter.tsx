@@ -1,8 +1,10 @@
 "use client";
 
-import { endOfMonth, startOfDay, subDays } from "date-fns";
+import { useState } from "react";
+import { endOfMonth, format, startOfDay, subDays } from "date-fns";
+import { es } from "date-fns/locale";
 import { getCurrentMonthDateRange } from "../utils/transactionFilters";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronDown } from "lucide-react";
 import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import { Button } from "@/components/ui/shadcn-button";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,8 @@ export default function TransactionDateFilter({
 }: TransactionDateFilterProps) {
   const today = startOfDay(new Date());
   const hasFilter = dateFrom !== null || dateTo !== null;
+  /** En móvil el rango personalizado va plegado: los atajos cubren el caso común. */
+  const [showRange, setShowRange] = useState(false);
 
   const applyThisMonth = () => {
     const { from, to } = getCurrentMonthDateRange(today);
@@ -54,6 +58,13 @@ export default function TransactionDateFilter({
   const isLast30Days =
     dateFrom?.getTime() === subDays(today, 29).getTime() &&
     dateTo?.getTime() === today.getTime();
+
+  // Plegado, el botón muestra el rango activo para no perderlo de vista.
+  const rangeLabel = hasFilter
+    ? `${dateFrom ? format(dateFrom, "d MMM", { locale: es }) : "Inicio"} – ${
+        dateTo ? format(dateTo, "d MMM", { locale: es }) : "Hoy"
+      }`
+    : "Rango personalizado";
 
   const handleFromChange = (date: Date | null) => {
     onDateFromChange(date);
@@ -115,7 +126,25 @@ export default function TransactionDateFilter({
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <button
+        type="button"
+        onClick={() => setShowRange((v) => !v)}
+        aria-expanded={showRange}
+        className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 transition active:bg-muted sm:hidden"
+      >
+        {rangeLabel}
+        <ChevronDown
+          className={cn("h-4 w-4 transition-transform", showRange && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+
+      <div
+        className={cn(
+          "grid gap-3 sm:grid-cols-2",
+          !showRange && "hidden sm:grid",
+        )}
+      >
         <SavvyDatePicker
           label="Desde"
           value={dateFrom}

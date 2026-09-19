@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Receipt, RotateCcw } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Receipt,
+  RotateCcw,
+} from "lucide-react";
 import FileUploader from "@/components/File/FileUploader";
 import FileList from "@/components/File/FileList";
 import Modal from "@/components/Modal/Modal";
@@ -14,6 +20,7 @@ import {
 } from "../../types/transactions.types";
 import { Account, Category } from "../../types/catalog.types";
 import { Button } from "@/components/ui/shadcn-button";
+import { cn } from "@/lib/utils";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
 import { useTransactionDocuments } from "../../hooks/useTransactionDocuments";
@@ -29,6 +36,31 @@ import {
   MAX_DOCUMENTS_TO_DELETE,
   MAX_DOCUMENT_SIZE,
 } from "@/lib/document-constraints";
+
+/** Tipos como botones: en móvil se elige de un toque, sin abrir un desplegable. */
+const TYPE_OPTIONS = [
+  {
+    value: "ingreso",
+    label: "Ingreso",
+    icon: ArrowDownLeft,
+    activeClass: "border-emerald-500 bg-emerald-50 text-emerald-700",
+  },
+  {
+    value: "egreso",
+    label: "Egreso",
+    icon: ArrowUpRight,
+    activeClass: "border-rose-500 bg-rose-50 text-rose-700",
+  },
+  {
+    value: "transferencia",
+    label: "Transferencia",
+    icon: ArrowLeftRight,
+    activeClass: "border-sky-500 bg-sky-50 text-sky-700",
+  },
+] as const;
+
+/** Alto y tipografía cómodos en móvil (16px evita el zoom automático de iOS). */
+const FIELD_MOBILE = "h-11 text-base sm:h-10 sm:text-sm";
 
 interface TransactionModalProps {
   open: boolean;
@@ -423,6 +455,54 @@ export default function TransactionModal({
             </div>
           )}
 
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-foreground">
+              Tipo
+            </span>
+            <div
+              role="radiogroup"
+              aria-label="Tipo de transacción"
+              className="grid grid-cols-3 gap-2"
+            >
+              {TYPE_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const isActive = form.type === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    onClick={() => handleTypeChange(opt.value)}
+                    className={cn(
+                      "flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-semibold transition",
+                      "sm:min-h-0 sm:flex-row sm:gap-1.5 sm:py-2.5",
+                      isActive
+                        ? opt.activeClass
+                        : "border-border bg-white text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              Monto
+            </label>
+            <CurrencyField
+              value={form.amount}
+              onChange={(value) =>
+                setForm((f) => ({ ...f, amount: value }))
+              }
+              className="h-12 text-lg font-semibold tabular-nums sm:h-10 sm:text-base"
+            />
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <SavvyDatePicker
@@ -434,21 +514,7 @@ export default function TransactionModal({
                     date: date ? date.toISOString().slice(0, 10) : "",
                   }))
                 }
-              />
-            </div>
-
-            <div>
-              <SavvySelect
-                label="Tipo"
-                value={form.type}
-                onChange={handleTypeChange}
-                placeholder="Selecciona un tipo"
-                showFlowIcons
-                options={[
-                  { label: "Ingreso", value: "ingreso" },
-                  { label: "Egreso", value: "egreso" },
-                  { label: "Transferencia", value: "transferencia" },
-                ]}
+                triggerClassName={FIELD_MOBILE}
               />
             </div>
 
@@ -462,10 +528,11 @@ export default function TransactionModal({
                   label: acc.name,
                   value: acc.id,
                 }))}
+                triggerClassName={FIELD_MOBILE}
               />
             </div>
 
-            <div>
+            <div className="sm:col-span-2">
               <SavvySelect
                 label="Categoría"
                 value={form.category}
@@ -481,24 +548,13 @@ export default function TransactionModal({
                   label: cat.name,
                   value: cat.id,
                 }))}
+                triggerClassName={FIELD_MOBILE}
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
-              Monto
-            </label>
-            <CurrencyField
-              value={form.amount}
-              onChange={(value) =>
-                setForm((f) => ({ ...f, amount: value }))
-              }
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
               Descripción
             </label>
             <textarea
@@ -507,7 +563,8 @@ export default function TransactionModal({
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
-              className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2 text-sm transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 resize-none"
+              placeholder="Ej. Compra supermercado"
+              className="block w-full resize-none rounded-xl border border-border bg-white px-3 py-2.5 text-base transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 sm:text-sm"
               rows={3}
             />
           </div>
@@ -537,7 +594,7 @@ export default function TransactionModal({
                   type="text"
                   value={payeeName}
                   onChange={(e) => setPayeeName(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                   placeholder="Ej. Gas Natural"
                   required
                 />
@@ -551,7 +608,7 @@ export default function TransactionModal({
                   type="text"
                   value={payeeAccount}
                   onChange={(e) => setPayeeAccount(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                   placeholder="Opcional"
                 />
               </div>
@@ -564,7 +621,7 @@ export default function TransactionModal({
                   type="text"
                   value={payeeBank}
                   onChange={(e) => setPayeeBank(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                   placeholder="Opcional"
                 />
               </div>
@@ -609,7 +666,7 @@ export default function TransactionModal({
                         onChange={(e) =>
                           setCustomIntervalAmount(Number(e.target.value))
                         }
-                        className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                        className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                       />
                     </div>
                     <div className="min-w-[8rem] flex-1">
@@ -623,7 +680,7 @@ export default function TransactionModal({
                             e.target.value as typeof customIntervalUnit
                           )
                         }
-                        className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                        className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                       >
                         <option value="days">Día(s)</option>
                         <option value="weeks">Semana(s)</option>
@@ -682,7 +739,7 @@ export default function TransactionModal({
                     max={28}
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(Number(e.target.value))}
-                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+                    className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                   />
                 </div>
               )}
@@ -785,13 +842,16 @@ export default function TransactionModal({
             </span>
           </label>
         )}
+      </div>
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+      {/* Acciones siempre a la vista en móvil: el formulario es largo y el botón
+          principal quedaba al final del scroll. */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-border bg-white px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:mb-0 sm:justify-end sm:gap-3 sm:border-0 sm:px-0 sm:pb-0 sm:pt-0">
         <Button
           type="button"
           onClick={onClose}
           variant="outline"
-          className="w-full rounded-lg border-slate-200 font-normal text-foreground hover:bg-slate-50 sm:w-auto"
+          className="h-11 flex-1 rounded-lg border-slate-200 font-normal text-foreground hover:bg-slate-50 sm:h-9 sm:flex-none"
         >
           Cancelar
         </Button>
@@ -799,7 +859,7 @@ export default function TransactionModal({
           type="submit"
           variant="default"
           disabled={loading || uploading}
-          className="w-full rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          className="h-11 flex-1 rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 sm:flex-none"
         >
           {uploading
             ? "Subiendo archivos…"
@@ -809,7 +869,6 @@ export default function TransactionModal({
                 ? "Guardar y agregar otra"
                 : "Guardar"}
         </Button>
-      </div>
       </div>
     </form>
       </div>

@@ -46,7 +46,7 @@ export default function FileUploader({
       <div
         {...getRootProps()}
         className={cn(
-          "cursor-pointer rounded-xl border-2 border-dashed p-8 transition-colors outline-none",
+          "cursor-pointer rounded-xl border-2 border-dashed p-5 transition-colors outline-none sm:p-8",
           "border-border bg-white/80 hover:border-mint/40 hover:bg-mint/[0.04]",
           "focus-visible:ring-2 focus-visible:ring-mint/35 focus-visible:ring-offset-2",
           isDragActive && "border-mint bg-mint/10",
@@ -54,10 +54,10 @@ export default function FileUploader({
         )}
       >
         <input {...getInputProps()} />
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex flex-col items-center gap-2 text-center sm:gap-3">
           <div
             className={cn(
-              "flex h-12 w-12 items-center justify-center rounded-full bg-mint/10 text-mint",
+              "flex h-10 w-10 items-center justify-center rounded-full bg-mint/10 text-mint sm:h-12 sm:w-12",
               isDragActive && "bg-mint/20"
             )}
           >

@@ -17,6 +17,8 @@ interface CustomTableProps<T> {
   loading?: boolean;
   rowKey: (row: T) => string;
   totalPages?: number;
+  /** Página actual cuando el padre la controla (p. ej. porque él pagina los datos). */
+  page?: number;
   onPageChange?: (page: number) => void;
 }
 
@@ -26,12 +28,14 @@ export default function CustomTable<T>({
   loading = false,
   rowKey,
   totalPages,
+  page: controlledPage,
   onPageChange,
 }: CustomTableProps<T>) {
-  const [page, setPage] = useState(1);
+  const [internalPage, setInternalPage] = useState(1);
+  const page = controlledPage ?? internalPage;
 
   const handlePageChange = (p: number) => {
-    setPage(p);
+    setInternalPage(p);
     onPageChange?.(p);
   };
 

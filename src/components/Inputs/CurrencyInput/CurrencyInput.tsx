@@ -2,6 +2,7 @@
 
 import type { FocusEventHandler } from "react";
 import CurrencyInput from "react-currency-input-field";
+import { cn } from "@/lib/utils";
 
 interface CurrencyFieldProps {
     value: number | null;
@@ -30,27 +31,13 @@ export function CurrencyField({
             }}
             placeholder={placeholder}
             disabled={disabled}
-            className={`
-        w-full
-        rounded-xl
-        border
-        border-border
-        bg-white
-        px-3
-        py-2
-        text-sm
-        text-foreground
-        placeholder:text-muted-foreground
-        shadow-sm
-        text-right
-        focus:border-accent
-        focus:outline-none
-        focus:ring-1
-        focus:ring-indigo-500
-        disabled:bg-muted
-        disabled:text-muted-foreground
-        ${className}
-      `}
+            className={cn(
+                "w-full rounded-xl border border-border bg-white px-3 py-2 text-right text-sm text-foreground shadow-sm",
+                "placeholder:text-muted-foreground",
+                "focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25",
+                "disabled:bg-muted disabled:text-muted-foreground",
+                className,
+            )}
             onValueChange={(_, __, values) => {
                 onChange(values?.float ?? null);
             }}

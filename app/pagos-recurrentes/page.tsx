@@ -1,12 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  differenceInCalendarDays,
-  format,
-  parse,
-  startOfDay,
-} from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import toast from "react-hot-toast";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
@@ -18,12 +13,19 @@ import StatusBadge from "@/components/FeedBack/StatusBadge";
 import ReportTransferTemplate from "@/features/transfer-templates/components/ReportTransferTemplate";
 import ExecuteTransferModal from "@/features/transfer-templates/components/ExecuteTransferModal";
 import EditTransferTemplateModal from "@/features/transfer-templates/components/EditTransferTemplateModal";
+import TransferTemplateDetailModal from "@/features/transfer-templates/components/TransferTemplateDetailModal";
 import { useTransferTemplates } from "@/features/transfer-templates/hooks/useTransferTemplates";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import type { TransferTemplate } from "@/features/transfer-templates/types/transfer.types";
 import {
+  dueProgressVariant,
+  frequencyLabel,
+  getDueProgressInfo,
+} from "@/features/transfer-templates/utils/schedule";
+import {
   BanknotesIcon,
+  EyeIcon,
   PencilSquareIcon,
   PauseIcon,
   PlayIcon,
@@ -37,63 +39,6 @@ const formatMoney = (value: number) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
-
-/** Días aproximados por ciclo según frecuencia (para la barra de avance al próximo vencimiento). */
-function frequencyToPeriodDays(
-  frequency: TransferTemplate["frequency"],
-  customIntervalDays?: number | null
-): number {
-  if (frequency === "custom" && customIntervalDays != null && customIntervalDays > 0) {
-    return customIntervalDays;
-  }
-  switch (frequency) {
-    case "weekly":
-      return 7;
-    case "biweekly":
-      return 14;
-    case "monthly":
-      return 30;
-    case "bimonthly":
-      return 60;
-    default:
-      return 30;
-  }
-}
-
-function getDueProgressInfo(
-  nextDueDateIso: string,
-  frequency: TransferTemplate["frequency"],
-  customIntervalDays?: number | null
-) {
-  const due = startOfDay(parse(nextDueDateIso, "yyyy-MM-dd", new Date()));
-  const today = startOfDay(new Date());
-  const daysUntil = differenceInCalendarDays(due, today);
-  const periodDays = frequencyToPeriodDays(frequency, customIntervalDays);
-
-  let progressPercent: number;
-  if (daysUntil <= 0) {
-    progressPercent = 100;
-  } else {
-    progressPercent = Math.min(
-      100,
-      Math.max(0, (1 - daysUntil / periodDays) * 100)
-    );
-  }
-
-  let label: string;
-  if (daysUntil < 0) {
-    const n = Math.abs(daysUntil);
-    label = n === 1 ? "Venció hace 1 día" : `Venció hace ${n} días`;
-  } else if (daysUntil === 0) {
-    label = "Vence hoy";
-  } else if (daysUntil === 1) {
-    label = "Falta 1 día";
-  } else {
-    label = `Faltan ${daysUntil} días`;
-  }
-
-  return { daysUntil, progressPercent, label, periodDays };
-}
 
 export default function TransferenciasPage() {
   const [tab, setTab] = useState<"active" | "tabreport">("active");
@@ -124,6 +69,13 @@ export default function TransferenciasPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const [viewTemplateId, setViewTemplateId] = useState<string | null>(null);
+  // Se resuelve desde `templates` para reflejar cambios tras editar/pagar.
+  const viewTemplate = useMemo(
+    () => templates.find((t) => t.id === viewTemplateId) ?? null,
+    [templates, viewTemplateId]
+  );
+
   const transferTemplateIds = useMemo(() => new Set(templates.map((t) => t.id)), [templates]);
   const transferTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -134,6 +86,13 @@ export default function TransferenciasPage() {
     });
   }, [transactions, transferTemplateIds]);
 
+  const viewTemplatePayments = useMemo(() => {
+    if (!viewTemplateId) return [];
+    return transferTransactions.filter((t) =>
+      t.description?.includes(`transfer_template_id:${viewTemplateId}`)
+    );
+  }, [transferTransactions, viewTemplateId]);
+
   const tabs = useMemo(
     () => [
       { id: "active" as const, label: "Plantillas", count: templates.length },
@@ -141,27 +100,6 @@ export default function TransferenciasPage() {
     ],
     [templates.length]
   );
-
-  const frequencyBadgeLabel = (t: TransferTemplate) => {
-    if (t.frequency === "custom" && t.customIntervalDays != null && t.customIntervalDays > 0) {
-      const d = t.customIntervalDays;
-      return d === 1 ? "Cada 1 día" : `Cada ${d} días`;
-    }
-    switch (t.frequency) {
-      case "weekly":
-        return "Semanal";
-      case "biweekly":
-        return "Quincenal";
-      case "monthly":
-        return "Mensual";
-      case "bimonthly":
-        return "Bimestral";
-      case "custom":
-        return "Personalizado";
-      default:
-        return t.frequency;
-    }
-  };
 
   const executeNow = async (template: TransferTemplate, amount: number) => {
     await executeTransfer(template.id, {
@@ -208,17 +146,13 @@ export default function TransferenciasPage() {
           t.frequency,
           t.customIntervalDays
         );
-        const variant =
-          daysUntil < 0
-            ? "red"
-            : daysUntil === 3
-              ? "red"
-              : daysUntil <= 5
-                ? "orange"
-                : "teal";
         return (
           <div className="min-w-[180px] max-w-[240px]">
-            <ProgressBar label={label} value={progressPercent} variant={variant} />
+            <ProgressBar
+              label={label}
+              value={progressPercent}
+              variant={dueProgressVariant(daysUntil)}
+            />
           </div>
         );
       },
@@ -228,7 +162,7 @@ export default function TransferenciasPage() {
       header: "Frecuencia",
       render: (t) => (
         <span className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold  ring-1 ring-emerald-600/20">
-          {frequencyBadgeLabel(t)}
+          {frequencyLabel(t)}
         </span>
       ),
     },
@@ -240,9 +174,20 @@ export default function TransferenciasPage() {
     {
       key: "actions",
       header: "",
-      className: "w-36 text-right",
+      className: "w-44 text-right",
       render: (t) => (
         <div className="flex flex-wrap items-center justify-end gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Ver detalle"
+            aria-label="Ver detalle"
+            onClick={() => setViewTemplateId(t.id)}
+          >
+            <EyeIcon className="size-4" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -388,6 +333,24 @@ export default function TransferenciasPage() {
           setSelectedTemplate(null);
           toast.success(description ? description : "Pago ejecutado");
           await reloadTemplates();
+        }}
+      />
+
+      <TransferTemplateDetailModal
+        open={viewTemplate != null}
+        onClose={() => setViewTemplateId(null)}
+        template={viewTemplate}
+        accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
+        payments={viewTemplatePayments}
+        onEdit={(t) => {
+          setViewTemplateId(null);
+          setEditTemplate(t);
+          setEditOpen(true);
+        }}
+        onExecute={(t) => {
+          setViewTemplateId(null);
+          setSelectedTemplate(t);
+          setExecuteOpen(true);
         }}
       />
 

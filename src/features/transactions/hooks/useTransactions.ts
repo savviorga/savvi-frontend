@@ -152,6 +152,13 @@ export function useTransactions() {
     }
   }
 
+  /** Refleja en el listado un cambio de adjuntos hecho fuera del PATCH (p. ej. desde el detalle). */
+  function setDocumentsCount(id: string, documentsCount: number) {
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, documentsCount } : t))
+    );
+  }
+
   async function bulk(items: CreateTransactionDto[]): Promise<boolean> {
     try {
       setLoading(true);
@@ -178,6 +185,7 @@ export function useTransactions() {
     show,
     remove,
     bulk,
+    setDocumentsCount,
     reload: load,
     uploadProgress: s3Upload.progress,
     uploadTotalPercent: s3Upload.totalPercent,

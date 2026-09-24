@@ -86,7 +86,7 @@ export default function Notifications() {
 
           <div className="border-t border-slate-100 px-3 py-2">
             <Link
-              href="/transferencias"
+              href="/pagos-recurrentes"
               onClick={() => setOpen(false)}
               className="text-xs font-semibold text-mint transition hover:opacity-90"
             >

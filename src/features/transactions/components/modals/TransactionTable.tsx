@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
@@ -47,6 +47,22 @@ function amountClass(type: Transaction["type"]): string {
   if (type === "ingreso") return "text-emerald-600";
   if (type === "egreso") return "text-rose-600";
   return "text-foreground";
+}
+
+function AttachmentBadge({ count }: { count?: number }) {
+  if (!count) return null;
+  const label =
+    count === 1 ? "1 archivo adjunto" : `${count} archivos adjuntos`;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
+      title={label}
+      aria-label={label}
+    >
+      <Paperclip className="h-3.5 w-3.5" aria-hidden />
+      {count > 1 && <span className="tabular-nums">{count}</span>}
+    </span>
+  );
 }
 
 /** Agrupa por día conservando el orden recibido (ya viene de más reciente a más antiguo). */
@@ -122,12 +138,15 @@ export default function TransactionTable({
       key: "description",
       header: "Descripción",
       render: (item) => (
-        <p
-          className="max-w-xs truncate font-medium text-foreground"
-          title={item.description}
-        >
-          {item.description}
-        </p>
+        <div className="flex max-w-xs items-center gap-2">
+          <p
+            className="min-w-0 truncate font-medium text-foreground"
+            title={item.description}
+          >
+            {item.description}
+          </p>
+          <AttachmentBadge count={item.documentsCount} />
+        </div>
       ),
     },
     {
@@ -226,8 +245,11 @@ export default function TransactionTable({
                           <FlowIconTransaction type={item.type} />
 
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-foreground">
-                              {item.description?.trim() || item.category || "Sin descripción"}
+                            <span className="flex items-center gap-1.5">
+                              <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                                {item.description?.trim() || item.category || "Sin descripción"}
+                              </span>
+                              <AttachmentBadge count={item.documentsCount} />
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                               {item.category}

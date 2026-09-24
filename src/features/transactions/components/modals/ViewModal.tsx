@@ -47,6 +47,7 @@ export default function ViewModal({
   data,
   onDelete,
   onEdit,
+  onDocumentsCountChange,
   accounts,
 }: {
   open: boolean;
@@ -54,6 +55,8 @@ export default function ViewModal({
   data: any | null;
   onDelete?: (id: string) => void;
   onEdit?: (id: string) => void;
+  /** Se llama tras borrar un adjunto, con la cantidad que queda. */
+  onDocumentsCountChange?: (id: string, count: number) => void;
   accounts?: { id: string; name: string }[];
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -214,7 +217,11 @@ export default function ViewModal({
             onClick={async () => {
               const target = documentToDelete;
               setDocumentToDelete(null);
-              if (target) await removeDocument(target.id);
+              if (!target) return;
+              const ok = await removeDocument(target.id);
+              if (ok) {
+                onDocumentsCountChange?.(data.id, documents.length - 1);
+              }
             }}
           >
             Eliminar

@@ -5,11 +5,12 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import Header from "@/features/layout/Header";
 import SideBarMenu from "./SideBarMenu";
 
-const AUTH_ONLY_ROUTES_HIDE_SIDEBAR = ["/login", "/register", "/list"];
+/** Páginas con su propio encabezado: se renderizan sin header ni sidebar globales. */
+const STANDALONE_ROUTES = ["/", "/login", "/register", "/list", "/terminos"];
 
 /**
  * Con sesión: fila [aside min-h-screen | franja + header + contenido].
- * Sin sesión o páginas auth: solo header global y children.
+ * Sin sesión: header global y children. Rutas standalone: solo children.
  */
 export default function MainLayout({
   children,
@@ -19,15 +20,13 @@ export default function MainLayout({
   const pathname = usePathname();
   const { isAuthenticated, loading } = useAuth();
 
-  const isPublicAuthPage = AUTH_ONLY_ROUTES_HIDE_SIDEBAR.some(
-    (p) => pathname === p
-  );
+  const isStandalonePage = STANDALONE_ROUTES.some((p) => pathname === p);
 
   const showSidebar =
-    !loading && isAuthenticated && !isPublicAuthPage;
+    !loading && isAuthenticated && !isStandalonePage;
 
   if (!showSidebar) {
-    if (isPublicAuthPage) {
+    if (isStandalonePage) {
       return <>{children}</>;
     }
     return (

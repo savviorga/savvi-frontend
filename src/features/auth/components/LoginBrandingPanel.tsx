@@ -1,8 +1,14 @@
 "use client";
 
 import { Check, LineChart, Repeat2, Star } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const features = [
+export interface BrandingFeature {
+  icon: LucideIcon;
+  label: string;
+}
+
+const defaultFeatures: readonly BrandingFeature[] = [
   {
     icon: Check,
     label: "Control de presupuesto mensual",
@@ -17,7 +23,25 @@ const features = [
   },
 ] as const;
 
-export default function LoginBrandingPanel() {
+interface LoginBrandingPanelProps {
+  /** Etiqueta pequeña sobre el título. */
+  eyebrow?: string;
+  /** Titular principal; acepta <span className="text-mint"> para resaltar. */
+  title?: React.ReactNode;
+  description?: string;
+  features?: readonly BrandingFeature[];
+}
+
+export default function LoginBrandingPanel({
+  eyebrow = "Finanzas personales",
+  title = (
+    <>
+      Tu dinero, bajo <span className="text-mint">control total.</span>
+    </>
+  ),
+  description = "Gestiona ingresos, egresos, presupuestos y pagos recurrentes desde un solo lugar.",
+  features = defaultFeatures,
+}: LoginBrandingPanelProps) {
   return (
     <div className="flex flex-col bg-[#011627] px-6 py-10 text-white sm:px-8 sm:py-12 lg:h-full lg:min-h-0 lg:justify-between lg:px-10 lg:py-14 xl:px-14">
       <div className="space-y-8">
@@ -38,18 +62,16 @@ export default function LoginBrandingPanel() {
             aria-hidden
           />
           <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-mint">
-            Finanzas personales
+            {eyebrow}
           </span>
         </div>
 
         <div className="space-y-3">
           <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.35rem] lg:leading-[1.15]">
-            Tu dinero, bajo{" "}
-            <span className="text-mint">control total.</span>
+            {title}
           </h1>
           <p className="max-w-md text-sm leading-relaxed text-slate-400 sm:text-base">
-            Gestiona ingresos, egresos, presupuestos y pagos recurrentes desde un
-            solo lugar.
+            {description}
           </p>
         </div>
       </div>

@@ -58,7 +58,7 @@ const menuItems: MenuItem[] = [
     icon: ClipboardDocumentListIcon,
   },
   {
-    href: "/transferencias",
+    href: "/pagos-recurrentes",
     label: "Pagos Recurrentes",
     icon: BanknotesIcon,
   },

@@ -18,6 +18,8 @@ export interface Transaction {
   description?: string;
   /** Solo viene en el PATCH de edición; el listado no lo incluye. */
   documents?: TransactionDocument[];
+  /** Cantidad de adjuntos. Solo viene en el listado (`GET /transactions`). */
+  documentsCount?: number;
 }
 
 export interface CreateTransactionDto {

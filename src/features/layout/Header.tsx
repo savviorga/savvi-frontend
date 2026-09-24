@@ -14,7 +14,7 @@ import Notifications from "@/features/layout/Notifications";
 
 const navLinks = [
   {
-    href: "/transferencias",
+    href: "/pagos-recurrentes",
     label: "Transferencias",
     icon: ArrowsRightLeftIcon,
   },

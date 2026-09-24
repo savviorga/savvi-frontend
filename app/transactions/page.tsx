@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import { TransactionService } from "@/features/transactions/services/transaction.service";
 import { TransferTemplatesService } from "@/features/transfer-templates/services/transfer-templates.service";
@@ -8,6 +8,7 @@ import { useS3Upload } from "@/hooks/useS3Upload";
 
 import TransactionTable from "@/features/transactions/components/modals/TransactionTable";
 import TransactionModal from "@/features/transactions/components/modals/TransactionModal";
+import BulkTransactionsModal from "@/features/transactions/components/modals/BulkTransactionsModal";
 import ReportTransactions from "@/features/transactions/components/ReportTransactions";
 
 import { Transaction, TransactionFormPayload } from "@/features/transactions/types/transactions.types";
@@ -16,12 +17,18 @@ import { useCategories } from '@/features/categories/hooks/useCategories';
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 
 import ViewModal from "@/features/transactions/components/modals/ViewModal";
-import TransactionDateFilter from "@/features/transactions/components/TransactionDateFilter";
+import TransactionFilters from "@/features/transactions/components/TransactionFilters";
+import TransactionFiltersToggle from "@/features/transactions/components/TransactionFiltersToggle";
+import TransactionTotals from "@/features/transactions/components/TransactionTotals";
 import {
+  filterTransactionsByCategory,
   filterTransactionsByDateRange,
+  filterTransactionsBySearch,
   getCurrentMonthDateRange,
+  getTransactionCategoryNames,
 } from "@/features/transactions/utils/transactionFilters";
 
+import { Layers } from "lucide-react";
 import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import PlannerTabs from "@/components/Tabs/PlannerTabs";
@@ -38,8 +45,10 @@ export default function TransactionsPage() {
     remove,
     create,
     update,
+    bulk,
     show,
     reload,
+    setDocumentsCount,
     isUploading,
     uploadTotalPercent,
   } = useTransactions();
@@ -49,6 +58,7 @@ export default function TransactionsPage() {
 
   // Estado del modal
   const [modalOpen, setModalOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editData, setEditData] = useState<Transaction | null>(null);
 
   const [viewOpen, setViewOpen] = useState(false);
@@ -59,10 +69,21 @@ export default function TransactionsPage() {
     () => getCurrentMonthDateRange().to,
   );
 
-  const filteredTransactions = useMemo(
-    () => filterTransactionsByDateRange(transactions, dateFrom, dateTo),
-    [transactions, dateFrom, dateTo],
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersPanelId = useId();
+
+  const categoryNames = useMemo(
+    () => getTransactionCategoryNames(transactions, categories),
+    [transactions, categories],
   );
+
+  const filteredTransactions = useMemo(() => {
+    const byDate = filterTransactionsByDateRange(transactions, dateFrom, dateTo);
+    const byCategory = filterTransactionsByCategory(byDate, categoryFilter, categories);
+    return filterTransactionsBySearch(byCategory, search);
+  }, [transactions, dateFrom, dateTo, categoryFilter, categories, search]);
 
   const incomeList = useMemo(
     () => filteredTransactions.filter((t) => t.type === "ingreso"),
@@ -77,7 +98,26 @@ export default function TransactionsPage() {
     [filteredTransactions],
   );
 
-  const clearDateFilter = () => {
+  const visibleTransactions =
+    tab === "income"
+      ? incomeList
+      : tab === "expenses"
+        ? expenseList
+        : tab === "transfers"
+          ? transferList
+          : filteredTransactions;
+  const visibleType =
+    tab === "income"
+      ? "ingreso"
+      : tab === "expenses"
+        ? "egreso"
+        : tab === "transfers"
+          ? "transferencia"
+          : undefined;
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategoryFilter("");
     setDateFrom(null);
     setDateTo(null);
   };
@@ -221,7 +261,15 @@ export default function TransactionsPage() {
         />
       </div>
 
-      <div className="hidden justify-end mb-4 md:flex">
+      <div className="mb-4 hidden justify-end gap-2 md:flex">
+        <Button
+          onClick={() => setBulkOpen(true)}
+          variant="outline"
+          className="rounded-xl"
+        >
+          <Layers className="h-4 w-4" aria-hidden />
+          Crear varios registros
+        </Button>
         <Button
           onClick={() => {
             setEditData(null);
@@ -234,20 +282,30 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
-      {/* FAB móvil */}
-      <button
-        type="button"
-        onClick={() => {
-          setEditData(null);
-          setModalOpen(true);
-        }}
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#0B1829] text-white shadow-lg shadow-black/20 transition-transform active:scale-95 md:hidden"
-        aria-label="Crear transacción"
-      >
-        <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-      </button>
+      {/* FAB móvil: crear varios registros y crear uno */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setBulkOpen(true)}
+          className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-white text-[#0B1829] shadow-lg shadow-black/10 transition-transform active:scale-95"
+          aria-label="Crear varios registros"
+        >
+          <Layers className="h-5 w-5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditData(null);
+            setModalOpen(true);
+          }}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0B1829] text-white shadow-lg shadow-black/20 transition-transform active:scale-95"
+          aria-label="Crear transacción"
+        >
+          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
 
       <div className="mb-4">
         <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transacciones" />
@@ -255,23 +313,36 @@ export default function TransactionsPage() {
 
       {(tab === "transactions" || tab === "income" || tab === "expenses" || tab === "transfers") && (
         <>
-          <TransactionDateFilter
+          <TransactionFiltersToggle
+            open={filtersOpen}
+            onToggle={() => setFiltersOpen((v) => !v)}
+            panelId={filtersPanelId}
             dateFrom={dateFrom}
             dateTo={dateTo}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-            onClear={clearDateFilter}
+            category={categoryFilter}
+            search={search}
+          />
+          <div id={filtersPanelId} hidden={!filtersOpen}>
+            <TransactionFilters
+              search={search}
+              onSearchChange={setSearch}
+              category={categoryFilter}
+              onCategoryChange={setCategoryFilter}
+              categoryNames={categoryNames}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+              onClear={clearFilters}
+            />
+          </div>
+          <TransactionTotals
+            items={visibleTransactions}
+            type={visibleType}
+            loading={loadingTransactions}
           />
           <TransactionTable
-            items={
-              tab === "income"
-                ? incomeList
-                : tab === "expenses"
-                  ? expenseList
-                  : tab === "transfers"
-                    ? transferList
-                    : filteredTransactions
-            }
+            items={visibleTransactions}
             loading={loadingTransactions}
             onDelete={handleDelete}
             onEdit={handleEdit}
@@ -281,6 +352,14 @@ export default function TransactionsPage() {
       )}
 
       {tab === "report" && <ReportTransactions transactions={transactions} categories={categories} />}
+
+      <BulkTransactionsModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        categories={categories}
+        accounts={accounts}
+        onConfirm={bulk}
+      />
 
       <TransactionModal
         open={modalOpen}
@@ -302,6 +381,7 @@ export default function TransactionsPage() {
         accounts={accounts}
         onDelete={handleDelete}
         onEdit={handleEdit}
+        onDocumentsCountChange={setDocumentsCount}
       />
     </>
   );

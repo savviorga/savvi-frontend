@@ -5,14 +5,14 @@ import SavvyBannerHome, {
   type SavvyBannerHomeStat,
 } from "@/components/Banner/SavvyBannerHome";
 import CustomTable, { type Column } from "@/components/Table/CustomTable";
-import PlannerTabs from "@/components/Tabs/PlannerTabs";
+import SavviTabs from "@/components/Tabs/SavviTabs";
 import { Button } from "@/components/ui/shadcn-button";
 import { usePaymentPlanner } from "@/features/payment-planner/hooks/usePaymentPlanner";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useCategories } from "@/features/categories/hooks/useCategories";
 import DebtFormModal from "@/features/payment-planner/components/DebtFormModal";
 import RegisterPaymentModal from "@/features/payment-planner/components/RegisterPaymentModal";
-import { DollarSign, Pencil, Trash2 } from "lucide-react";
+import { CircleCheck, ClipboardList, DollarSign, History, Pencil, Trash2 } from "lucide-react";
 import type {
   Debt,
   CreateDebtDto,
@@ -149,11 +149,12 @@ export default function PlanificadorPage() {
 
   const plannerTabs = useMemo(
     () => [
-      { id: "obligations" as const, label: "Obligaciones", count: pendingDebts.length },
-      { id: "paid" as const, label: "Pagadas", count: paidDebts.length },
+      { id: "obligations" as const, label: "Obligaciones", icon: ClipboardList, count: pendingDebts.length },
+      { id: "paid" as const, label: "Pagadas", icon: CircleCheck, count: paidDebts.length },
       {
         id: "history" as const,
         label: "Historial de pagos",
+        icon: History,
         count: paymentHistoryRows.length,
       },
     ],
@@ -382,7 +383,7 @@ export default function PlanificadorPage() {
       </div>
 
       <div className="mb-4">
-        <PlannerTabs
+        <SavviTabs
           tabs={plannerTabs}
           value={tab}
           onChange={setTab}

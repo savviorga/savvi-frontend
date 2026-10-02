@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
 import { ProgressBar } from "@/components/ProgressBar";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
-import PlannerTabs from "@/components/Tabs/PlannerTabs";
+import SavviTabs from "@/components/Tabs/SavviTabs";
+import { BarChart3, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/shadcn-button";
 import StatusBadge from "@/components/FeedBack/StatusBadge";
 import ReportTransferTemplate from "@/features/transfer-templates/components/ReportTransferTemplate";
@@ -95,8 +96,8 @@ export default function TransferenciasPage() {
 
   const tabs = useMemo(
     () => [
-      { id: "active" as const, label: "Plantillas", count: templates.length },
-      { id: "tabreport" as const, label: "Reporte" },
+      { id: "active" as const, label: "Plantillas", icon: Repeat, count: templates.length },
+      { id: "tabreport" as const, label: "Reporte", icon: BarChart3 },
     ],
     [templates.length]
   );
@@ -294,7 +295,7 @@ export default function TransferenciasPage() {
         </p>
       </div>
 
-      <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transferencias" />
+      <SavviTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transferencias" />
 
       {tab === "active" && (
         <section>

@@ -20,6 +20,7 @@ export function useAuth() {
     register: ctxRegister,
     logout,
     getToken,
+    updateUser,
   } = ctx;
 
   const login = useCallback(
@@ -74,6 +75,7 @@ export function useAuth() {
     logout,
     isAuthenticated,
     getToken,
+    updateUser,
     status: loading ? "loading" : isAuthenticated ? "authenticated" : "unauthenticated",
   };
 }

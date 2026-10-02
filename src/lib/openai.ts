@@ -13,6 +13,9 @@ export const AUDIO_MODEL_FALLBACK = "whisper-1";
 /** Modelo de extracción de datos (soporta salidas estructuradas). */
 export const TEXT_MODEL = process.env.IA_MODEL_TEXTO?.trim() || "gpt-4o-mini";
 
+/** Modelo conversacional de Savvi IA; por defecto el mismo de texto. */
+export const CHAT_MODEL = process.env.IA_MODEL_CHAT?.trim() || TEXT_MODEL;
+
 export class OpenAIError extends Error {
   constructor(
     message: string,

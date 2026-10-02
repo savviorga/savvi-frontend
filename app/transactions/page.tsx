@@ -28,10 +28,10 @@ import {
   getTransactionCategoryNames,
 } from "@/features/transactions/utils/transactionFilters";
 
-import { Layers } from "lucide-react";
+import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BarChart3, Layers, List } from "lucide-react";
 import { Button } from "@/components/ui/shadcn-button";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
-import PlannerTabs from "@/components/Tabs/PlannerTabs";
+import SavviTabs from "@/components/Tabs/SavviTabs";
 import toast from "react-hot-toast";
 import { isApiError, getErrorMessages } from "@/types/api-error.type";
 
@@ -124,11 +124,11 @@ export default function TransactionsPage() {
 
   const tabs = useMemo(
     () => [
-      { id: "transactions" as const, label: "Todas", count: filteredTransactions.length },
-      { id: "report" as const, label: "Reporte" },
-      { id: "income" as const, label: "Ingresos", count: incomeList.length },
-      { id: "expenses" as const, label: "Gastos", count: expenseList.length },
-      { id: "transfers" as const, label: "Transferencias", count: transferList.length },
+      { id: "transactions" as const, label: "Todas", icon: List, count: filteredTransactions.length },
+      { id: "report" as const, label: "Reporte", icon: BarChart3 },
+      { id: "income" as const, label: "Ingresos", icon: ArrowDownLeft, count: incomeList.length },
+      { id: "expenses" as const, label: "Gastos", icon: ArrowUpRight, count: expenseList.length },
+      { id: "transfers" as const, label: "Transferencias", icon: ArrowRightLeft, count: transferList.length },
     ],
     [
       filteredTransactions.length,
@@ -308,7 +308,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="mb-4">
-        <PlannerTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transacciones" />
+        <SavviTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transacciones" />
       </div>
 
       {(tab === "transactions" || tab === "income" || tab === "expenses" || tab === "transfers") && (

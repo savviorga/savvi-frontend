@@ -57,6 +57,8 @@ type AuthContextValue = {
   ) => Promise<{ success: boolean; callbackUrl?: string }>;
   logout: () => void;
   getToken: () => string | null;
+  /** Reemplaza el usuario en memoria y en storage (p. ej. tras `PATCH /profile`). */
+  updateUser: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -123,6 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getToken = useCallback(() => access_token, [access_token]);
 
+  const updateUser = useCallback(
+    (next: User) => {
+      setUser(next);
+      if (access_token) saveStored({ user: next, access_token });
+    },
+    [access_token]
+  );
+
   const value: AuthContextValue = {
     user,
     access_token,
@@ -132,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     getToken,
+    updateUser,
   };
 
   return (

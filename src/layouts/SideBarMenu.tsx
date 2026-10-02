@@ -128,8 +128,13 @@ export default function SideBarMenu() {
       </div>
 
       {/* Perfil */}
-      <div className="shrink-0 border-b border-white/10 px-4 py-4">
-        <div className="flex gap-3">
+      <div className="shrink-0 border-b border-white/10 px-2 py-2">
+        <Link
+          href="/perfil"
+          className={`flex gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/5 ${
+            pathname === "/perfil" ? "bg-white/5 ring-1 ring-mint/20" : ""
+          }`}
+        >
           <div
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-xs font-bold text-[#0A1622] shadow-md ring-2 ring-white/10"
             aria-hidden
@@ -157,7 +162,7 @@ export default function SideBarMenu() {
               <span>En línea</span>
             </p>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Navegación */}

@@ -1,85 +1,274 @@
 "use client";
 
-import { useState } from "react";
-import { BotMessageSquare, RotateCcw, Timer, WandSparkles, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { RotateCcw } from "lucide-react";
+import SavviIAAvatar from "./SavviIAAvatar";
 import SavviIAComposer from "./SavviIAComposer";
 import SavviIAConversation from "./SavviIAConversation";
-import { ChatMessage } from "./SavviIAMessageBubble";
+import SavviIAUsage from "./SavviIAUsage";
+import { ChatMessage, ProposalHandlers } from "./SavviIAMessageBubble";
 import { AiRegisterJobResponse, AiRegisterService } from "../services/ai-register.service";
+import { AiChatService, ChatTurn } from "../services/ai-chat.service";
+import type { AdvisorStep, AdvisorUsage, Proposal } from "../types/proposal.types";
+import { EMPTY_USAGE, addToTotals, type UsageTotals } from "../utils/usage";
+import {
+  describeProposalForModel,
+  describeResultsForModel,
+  executeSelectedItems,
+  toProposal,
+} from "../utils/proposals";
+import {
+  clearChat,
+  describeAbsence,
+  loadChat,
+  loadLifetimeUsage,
+  saveChat,
+  saveLifetimeUsage,
+} from "../utils/chat-storage";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import type { ApiError } from "@/types/api-error.type";
 
-const INITIAL_MESSAGES: ChatMessage[] = [
-  {
-    id: "m1",
-    role: "assistant",
-    text: "Hola, soy Savvi IA. Estoy lista para ayudarte con tus finanzas.",
-    timestamp: "10:12",
-  },
-  {
-    id: "m2",
-    role: "user",
-    text: "Quiero organizar mis gastos por categorías este mes.",
-    timestamp: "10:13",
-  },
-  {
-    id: "m3",
-    role: "assistant",
-    text: "Puedo registrar transacciones desde una imagen o audio. Adjunta un archivo y te aviso cuando quede creada.",
-    timestamp: "10:13",
-  },
-];
+const getCurrentTime = () =>
+  new Date().toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
-const SUGGESTED_PROMPTS = [
-  "Analiza mis gastos fijos",
-  "Ayúdame con un presupuesto",
-  "Detecta oportunidades de ahorro",
-  "Explícame mi flujo de caja",
-];
+/** Tras esta pausa, al volver el asesor saluda y retoma por iniciativa propia. */
+const RESUME_GREETING_AFTER_MS = 30 * 60_000;
 
-const QUICK_ACTIONS = [
-  "Resume mis gastos del mes",
-  "Dame 3 ideas para ahorrar",
-  "Crear plan de presupuesto semanal",
-];
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Pausa entre burbujas: más larga para mensajes largos, como si escribiera. */
+const typingPause = (text: string) => Math.min(1800, 450 + text.length * 12);
+
+const getErrorMessage = (error: unknown): string => {
+  const message = (error as Partial<ApiError> | null)?.message;
+  if (typeof message === "string" && message) return message;
+  if (Array.isArray(message) && message.length) return message.join("\n");
+  return "No pude responder en este momento. Intenta de nuevo.";
+};
+
+/**
+ * Lo que ve el modelo: conversación + resumen de cada propuesta. Los avisos
+ * del registro por archivo y los errores locales no van.
+ */
+const toChatHistory = (messages: ChatMessage[]): ChatTurn[] =>
+  messages
+    .filter((message) => !message.status && !message.isError)
+    .map((message) => ({
+      role: message.role,
+      content: [
+        message.text,
+        message.chart && `[Mostraste un gráfico: ${message.chart.title}]`,
+        message.proposal && describeProposalForModel(message.proposal),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    }));
 
 export default function SavviIAChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
+  const { user } = useAuth();
+  // ProtectedRoute monta esta página solo en el cliente y con sesión: se puede leer localStorage aquí.
+  const userId = user?.id ?? "anon";
+  const [restored] = useState(() => loadChat(userId));
+  const [messages, setMessages] = useState<ChatMessage[]>(() => restored?.messages ?? []);
+  // Consumo del modelo: de esta conversación y acumulado del usuario.
+  const [usage, setUsage] = useState<UsageTotals>(() => restored?.usage ?? EMPTY_USAGE);
+  const [lifetimeUsage, setLifetimeUsage] = useState<UsageTotals>(() => loadLifetimeUsage(userId));
+  const usageRef = useRef(usage);
   const [isTyping, setIsTyping] = useState(false);
   const [isProcessingJob, setIsProcessingJob] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [activity, setActivity] = useState<string | null>(null);
+  // Copia síncrona: las acciones async encadenan varias actualizaciones.
+  const messagesRef = useRef(messages);
+  // Evita que una respuesta pendiente aparezca después de reiniciar el chat.
+  const conversationIdRef = useRef(0);
+  const startedRef = useRef(false);
 
-  const getCurrentTime = () =>
-    new Date().toLocaleTimeString("es-CO", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-
-  const handleSendMessage = (text: string) => {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      text,
-      timestamp: getCurrentTime(),
-    };
-
-    setMessages((previous) => [...previous, userMessage]);
+  const updateMessages = (updater: (previous: ChatMessage[]) => ChatMessage[]) => {
+    messagesRef.current = updater(messagesRef.current);
+    setMessages(messagesRef.current);
+    saveChat(userId, messagesRef.current, usageRef.current);
   };
 
-  const appendAssistantMessage = (text: string, extras?: Partial<ChatMessage>) => {
-    setMessages((previous) => [
+  const appendMessage = (message: Omit<ChatMessage, "id" | "timestamp">) => {
+    updateMessages((previous) => [
       ...previous,
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        text,
-        timestamp: getCurrentTime(),
-        ...extras,
-      },
+      { id: crypto.randomUUID(), timestamp: getCurrentTime(), ...message },
     ]);
   };
 
+  const appendAssistantMessage = (text: string, extras?: Partial<ChatMessage>) => {
+    appendMessage({ role: "assistant", text, ...extras });
+  };
+
+  /**
+   * Suma lo que costó una respuesta. Al acumulado siempre (ya se cobró); a la
+   * conversación solo si sigue siendo la actual.
+   */
+  const recordUsage = (spent: AdvisorUsage | undefined, inCurrentConversation: boolean) => {
+    if (!spent || spent.calls === 0) return;
+    setLifetimeUsage((previous) => {
+      const next = addToTotals(previous, spent);
+      saveLifetimeUsage(userId, next);
+      return next;
+    });
+    if (!inCurrentConversation) return;
+    usageRef.current = addToTotals(usageRef.current, spent);
+    setUsage(usageRef.current);
+    saveChat(userId, messagesRef.current, usageRef.current);
+  };
+
+  const updateProposal = (messageId: string, updater: (proposal: Proposal) => Proposal) => {
+    updateMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId && message.proposal
+          ? { ...message, proposal: updater(message.proposal) }
+          : message,
+      ),
+    );
+  };
+
+  /**
+   * Pide la siguiente respuesta del asesor con el historial actual. Con el
+   * historial vacío, el asesor abre la conversación por iniciativa propia.
+   */
+  const requestReply = async () => {
+    const conversationId = conversationIdRef.current;
+    const isCurrent = () => conversationId === conversationIdRef.current;
+    const steps: AdvisorStep[] = [];
+
+    setIsReplying(true);
+    setActivity(messagesRef.current.length === 0 ? "Revisando cómo van tus finanzas" : null);
+    try {
+      const reply = await AiChatService.send(toChatHistory(messagesRef.current), (step) => {
+        if (!isCurrent()) return;
+        steps.push(step);
+        setActivity(step.label);
+      });
+      recordUsage(reply.usage, isCurrent());
+      if (!isCurrent()) return;
+
+      if (reply.proposal) {
+        // Una propuesta nueva reemplaza a la que siga pendiente.
+        updateMessages((previous) =>
+          previous.map((message) =>
+            message.proposal?.status === "pending"
+              ? { ...message, proposal: { ...message.proposal, status: "dismissed" } }
+              : message,
+          ),
+        );
+      }
+
+      // Burbujas separadas con una pausa de "escribiendo" entre ellas.
+      setActivity(null);
+      for (let i = 0; i < reply.messages.length; i += 1) {
+        const { text, chart } = reply.messages[i];
+        const isLast = i === reply.messages.length - 1;
+        if (i > 0) {
+          await wait(typingPause(text) + (chart ? 400 : 0));
+          if (!isCurrent()) return;
+        }
+        appendAssistantMessage(text, {
+          animate: true,
+          chart,
+          steps: i === 0 && steps.length ? steps : undefined,
+          proposal: isLast && reply.proposal ? toProposal(reply.proposal) : undefined,
+          suggestions: isLast && !reply.proposal ? reply.suggestions : undefined,
+        });
+      }
+    } catch (error) {
+      recordUsage((error as { usage?: AdvisorUsage } | null)?.usage, isCurrent());
+      if (!isCurrent()) return;
+      appendAssistantMessage(getErrorMessage(error), { isError: true });
+    } finally {
+      if (isCurrent()) {
+        setIsReplying(false);
+        setActivity(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    if (!restored) {
+      void requestReply();
+      return;
+    }
+    const away = Date.now() - restored.updatedAt;
+    if (away >= RESUME_GREETING_AFTER_MS) {
+      void notifyAdvisor(
+        `(Mensaje automático de la app, no lo escribió el usuario) El usuario volvió a Savvi IA después de ${describeAbsence(away)}. Salúdalo en una frase y retoma con iniciativa: revisa si cambió algo en su situación desde la última conversación y propón el siguiente paso, sin repetir lo que ya le dijiste.`,
+      );
+    }
+    // Solo al montar: el asesor saluda (o retoma) y toma la iniciativa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSendMessage = async (text: string, options?: { reply?: boolean }) => {
+    appendMessage({ role: "user", text });
+    if (options?.reply === false) return;
+    await requestReply();
+  };
+
+  /** Le cuenta al asesor algo que pasó en la app y deja que reaccione. */
+  const notifyAdvisor = async (text: string) => {
+    appendMessage({ role: "user", text, hidden: true });
+    await requestReply();
+  };
+
+  const proposalHandlers: ProposalHandlers = {
+    disabled: isReplying || isCreating,
+    onToggle: (messageId, index) =>
+      updateProposal(messageId, (proposal) => ({
+        ...proposal,
+        selected: proposal.selected.map((value, i) => (i === index ? !value : value)),
+      })),
+    onDismiss: (messageId) => {
+      updateProposal(messageId, (proposal) => ({ ...proposal, status: "dismissed" }));
+    },
+    onConfirm: async (messageId) => {
+      const proposal = messagesRef.current.find((m) => m.id === messageId)?.proposal;
+      if (!proposal || proposal.status !== "pending") return;
+
+      const conversationId = conversationIdRef.current;
+      setIsCreating(true);
+      updateProposal(messageId, (current) => ({
+        ...current,
+        status: "creating",
+        results: current.items.map(() => null),
+      }));
+
+      try {
+        await executeSelectedItems(proposal, (index, result) => {
+          if (conversationId !== conversationIdRef.current) return;
+          updateProposal(messageId, (current) => ({
+            ...current,
+            results: current.results?.map((r, i) => (i === index ? result : r)),
+          }));
+        });
+      } finally {
+        setIsCreating(false);
+      }
+      if (conversationId !== conversationIdRef.current) return;
+
+      updateProposal(messageId, (current) => ({ ...current, status: "done" }));
+      const finished = messagesRef.current.find((m) => m.id === messageId)?.proposal;
+      if (finished) await notifyAdvisor(describeResultsForModel(finished));
+    },
+  };
+
   const pollJobUntilDone = async (jobId: string, attachmentName: string) => {
+    const conversationId = conversationIdRef.current;
     setIsTyping(true);
     setIsProcessingJob(true);
+    let completed = false;
     try {
       let attempts = 0;
       const maxAttempts = 20;
@@ -87,131 +276,128 @@ export default function SavviIAChatPage() {
 
       while (attempts < maxAttempts) {
         job = await AiRegisterService.getJob(jobId);
-
-        if (job.status === "completed" || job.status === "failed") {
-          break;
-        }
+        if (job.status === "completed" || job.status === "failed") break;
         attempts += 1;
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await wait(2000);
       }
+      if (conversationId !== conversationIdRef.current) return;
 
       if (!job) {
-        appendAssistantMessage(
-          "No fue posible consultar el estado del registro. Intenta nuevamente.",
-          { status: "failed", attachmentName },
-        );
+        appendAssistantMessage("No fue posible consultar el estado del registro. Intenta nuevamente.", {
+          status: "failed",
+          attachmentName,
+        });
         return;
       }
 
       if (job.status === "completed" && job.transactionId) {
-        appendAssistantMessage(
-          `Listo. Registré la transacción automáticamente.\nID: ${job.transactionId}`,
-          { status: "completed", attachmentName },
-        );
+        appendAssistantMessage("Listo, registré la transacción de tu archivo.", {
+          status: "completed",
+          attachmentName,
+        });
+        completed = true;
         return;
       }
 
-      const errorText =
-        job.error || "No se pudo extraer la información necesaria del archivo.";
-      appendAssistantMessage(`Falló el registro automático.\n${errorText}`, {
-        status: "failed",
-        attachmentName,
-      });
+      const errorText = job.error || "No se pudo extraer la información necesaria del archivo.";
+      appendAssistantMessage(`Falló el registro automático.\n${errorText}`, { status: "failed", attachmentName });
     } catch {
-      appendAssistantMessage("Ocurrió un error al procesar el archivo.", {
-        status: "failed",
-        attachmentName,
-      });
+      appendAssistantMessage("Ocurrió un error al procesar el archivo.", { status: "failed", attachmentName });
     } finally {
       setIsTyping(false);
       setIsProcessingJob(false);
     }
+
+    if (completed && conversationId === conversationIdRef.current) {
+      await notifyAdvisor(
+        `(Mensaje automático de la app, no lo escribió el usuario) Se registró una transacción a partir del archivo "${attachmentName}". Revisa la transacción más reciente y coméntale al usuario en una o dos frases qué significa para su mes.`,
+      );
+    }
   };
 
   const handleJobCreated = (job: AiRegisterJobResponse, attachmentName: string) => {
-    appendAssistantMessage(
-      "Recibí tu archivo. Estoy procesándolo para registrar la transacción.",
-      { status: "queued", attachmentName },
-    );
+    appendAssistantMessage("Recibí tu archivo. Estoy procesándolo para registrar la transacción.", {
+      status: "queued",
+      attachmentName,
+    });
     void pollJobUntilDone(job.id, attachmentName);
   };
 
+  const resetChat = () => {
+    conversationIdRef.current += 1;
+    setIsTyping(false);
+    setIsProcessingJob(false);
+    setIsReplying(false);
+    setIsCreating(false);
+    setActivity(null);
+    usageRef.current = EMPTY_USAGE;
+    setUsage(EMPTY_USAGE);
+    clearChat(userId);
+    updateMessages(() => []);
+    void requestReply();
+  };
+
+  const isBusy = isTyping || isReplying;
+  const hasConversation = messages.some((message) => message.role === "user" && !message.hidden);
+  const lastVisible = [...messages].reverse().find((message) => !message.hidden);
+  const suggestions =
+    lastVisible?.role === "assistant" && !isCreating ? (lastVisible.suggestions ?? []) : [];
+
   return (
-    <section className="flex h-full min-h-[calc(100vh-160px)] w-full flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:gap-5 md:p-6">
-      <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1">
-          <BotMessageSquare className="h-4 w-4 text-emerald-600" aria-hidden />
-          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-            Savvi IA
-          </span>
+    <section className="savvi-msg-in flex h-[calc(100dvh-7.5rem)] w-full flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-emerald-50/40 shadow-sm md:h-[calc(100dvh-8.5rem)]">
+      <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white/80 px-4 py-3 backdrop-blur md:px-6">
+        <div className="flex items-center gap-3">
+          <SavviIAAvatar size="md" active={isBusy} />
+          <div className="leading-tight">
+            <h1 className="text-base font-semibold text-slate-900">Savvi IA</h1>
+            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span
+                className={`h-1.5 w-1.5 rounded-full transition-colors ${isBusy ? "bg-amber-400" : "bg-emerald-400"}`}
+                aria-hidden
+              />
+              {isCreating
+                ? "Guardando en tu cuenta..."
+                : activity
+                  ? "Revisando tus datos..."
+                  : isBusy
+                    ? "Escribiendo..."
+                    : "Tu asesor financiero"}
+            </p>
+          </div>
         </div>
 
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-            Asistente financiero
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 md:text-base">
-            Envía una imagen o audio para registrar una transacción de forma
-            automática.
-          </p>
+        <div className="flex items-center gap-1">
+          <SavviIAUsage conversation={usage} lifetime={lifetimeUsage} />
+          {hasConversation && (
+            <button
+              type="button"
+              onClick={resetChat}
+              className="savvi-msg-in group inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              <RotateCcw
+                className="h-3.5 w-3.5 transition-transform duration-500 group-hover:-rotate-180"
+                aria-hidden
+              />
+              <span className="hidden sm:inline">Nueva conversación</span>
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-500">Modo</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-            <WandSparkles className="h-4 w-4 text-emerald-500" aria-hidden />
-            Asistente Proactivo
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-500">Velocidad</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-            <Zap className="h-4 w-4 text-amber-500" aria-hidden />
-            Respuesta rápida
-          </p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-500">Disponibilidad</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-            <Timer className="h-4 w-4 text-cyan-500" aria-hidden />
-            24/7 (demo)
-          </p>
-        </div>
-      </div>
+      <SavviIAConversation
+        messages={messages}
+        isTyping={isBusy}
+        activity={activity}
+        suggestions={suggestions}
+        onSelectSuggestion={(prompt) => void handleSendMessage(prompt)}
+        proposalHandlers={proposalHandlers}
+        onAsk={isBusy || isCreating ? undefined : (question) => void handleSendMessage(question)}
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {QUICK_ACTIONS.map((action) => (
-          <button
-            key={action}
-            type="button"
-            onClick={() => handleSendMessage(action)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 md:text-sm"
-          >
-            {action}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            setIsTyping(false);
-            setIsProcessingJob(false);
-            setMessages(INITIAL_MESSAGES);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 md:text-sm"
-        >
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-          Reiniciar chat
-        </button>
-      </div>
-
-      <SavviIAConversation messages={messages} isTyping={isTyping} />
       <SavviIAComposer
-        quickPrompts={SUGGESTED_PROMPTS}
-        onSendMessage={handleSendMessage}
+        onSendMessage={(text, options) => void handleSendMessage(text, options)}
         onJobCreated={handleJobCreated}
-        disabled={isProcessingJob}
+        disabled={isProcessingJob || isReplying || isCreating}
       />
     </section>
   );

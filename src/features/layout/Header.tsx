@@ -8,6 +8,7 @@ import {
   ArrowsRightLeftIcon,
   ClockIcon,
   PresentationChartLineIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import Notifications from "@/features/layout/Notifications";
@@ -155,6 +156,16 @@ export default function Header({ embedded = false }: HeaderProps) {
                         <p className="text-xs text-slate-500">
                           {user?.email ?? ""}
                         </p>
+                      </div>
+                      <div className="py-2">
+                        <Link
+                          href="/perfil"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          <UserCircleIcon className="h-4 w-4" aria-hidden />
+                          Mi perfil
+                        </Link>
                       </div>
                       <div className="border-t border-slate-100 pt-2">
                         <button

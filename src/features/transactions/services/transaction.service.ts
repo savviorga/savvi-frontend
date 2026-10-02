@@ -88,14 +88,15 @@ export const TransactionService = {
     return handleResponse<DeleteTransactionResult>(res);
   },
 
+  /** Inserta el lote completo o nada: el backend lo guarda en una sola transacción. */
   bulk: async (items: CreateTransactionDto[]): Promise<Transaction[]> => {
     const res = await fetch(`${transactionsApi()}/bulk`, {
       method: "POST",
       headers: getJsonAuthHeaders(),
       body: JSON.stringify(items),
     });
-    const data = await handleResponse<Transaction[]>(res);
-    return data.map(normalizeTransaction);
+    const body = await handleResponse<{ count: number; data: Transaction[] } | Transaction[]>(res);
+    return (Array.isArray(body) ? body : body.data).map(normalizeTransaction);
   },
 
   /**

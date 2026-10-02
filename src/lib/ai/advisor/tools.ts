@@ -121,7 +121,7 @@ export const ADVISOR_TOOLS = [
   }),
   listTool(
     "proponer_transacciones",
-    "Propone registrar ingresos o gastos que el usuario te contó.",
+    "Propone registrar ingresos o gastos que el usuario te contó. Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
     "transacciones",
     {
       date: { type: "string", description: "Fecha YYYY-MM-DD." },

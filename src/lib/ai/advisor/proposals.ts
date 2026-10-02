@@ -21,6 +21,10 @@ import { todayInBogota } from "./snapshot";
 import type { ProposalToolName } from "./tools";
 
 const MAX_ITEMS = 20;
+/** Las transacciones se guardan por lotes (`/transactions/bulk`): admiten tablas largas. */
+const MAX_TRANSACTIONS = 100;
+/** Desde cuántas filas se verifica cada monto contra lo que escribió el usuario. */
+const VERIFY_FROM_ITEMS = 3;
 
 type Args = Record<string, unknown>;
 type Raw = Record<string, unknown>;
@@ -31,6 +35,8 @@ export interface ProposalCheck {
   /** Qué se descartó y por qué; se le devuelve al modelo si no quedó nada */
   problems: string[];
 }
+
+const maxItems = (kind: ProposalData["kind"]) => (kind === "transactions" ? MAX_TRANSACTIONS : MAX_ITEMS);
 
 const text = (value: unknown, max: number): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
@@ -48,9 +54,38 @@ const isoDate = (value: unknown): string | undefined => {
 
 const normalize = (name: string) => name.trim().toLocaleLowerCase("es");
 
-function list(args: Args, key: string): Raw[] {
+function list(args: Args, key: string, problems: string[], max = MAX_ITEMS): Raw[] {
   const raw = args[key];
-  return Array.isArray(raw) ? (raw.slice(0, MAX_ITEMS) as Raw[]) : [];
+  if (!Array.isArray(raw)) return [];
+  if (raw.length > max) problems.push(`Solo se aceptan ${max} ${key} por propuesta; se descartaron ${raw.length - max}.`);
+  return raw.slice(0, max) as Raw[];
+}
+
+const MULTIPLIERS: Record<string, number> = { mil: 1e3, k: 1e3, millon: 1e6, millón: 1e6, millones: 1e6 };
+
+/**
+ * Montos que aparecen en lo que escribió el usuario, en formato colombiano
+ * ("4.500.000,50") o anglo ("4,500,000.50"), y con "mil"/"millones"/"k".
+ * Ante la duda se guardan todas las lecturas posibles: sirve para detectar
+ * montos inventados, no para interpretar el texto.
+ */
+export function amountsIn(text: string): Set<number> {
+  const found = new Set<number>();
+  const pattern = /\d[\d.,]*(?:\s*(mil(?:lones|lón|lon)?|k)\b)?/gi;
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0].replace(/\s*[a-zñó]+$/i, "").replace(/[.,]+$/, "");
+    const factor = match[1] ? MULTIPLIERS[match[1].toLocaleLowerCase("es")] ?? 1 : 1;
+    const digits = token.replace(/[.,]/g, "");
+    const readings = [Number(digits)];
+    const decimal = token.match(/^(.*)[.,](\d{1,2})$/);
+    if (decimal) readings.push(Number(`${decimal[1].replace(/[.,]/g, "")}.${decimal[2]}`));
+    for (const value of readings) {
+      if (!Number.isFinite(value)) continue;
+      found.add(Math.round(value * 100) / 100);
+      found.add(Math.round(value * factor * 100) / 100);
+    }
+  }
+  return found;
 }
 
 /** Registra por qué se descartó un ítem y lo quita de la lista. */
@@ -69,7 +104,7 @@ function lookup(catalog: AdvisorCatalog) {
 
 function categories(args: Args, catalog: AdvisorCatalog, problems: string[]): CategoryDraft[] {
   const seen = new Set(catalog.categories.map((c) => normalize(c.name)));
-  return list(args, "categorias").flatMap((item): CategoryDraft[] => {
+  return list(args, "categorias", problems).flatMap((item): CategoryDraft[] => {
     const name = text(item.name, 100);
     if (!name) return [];
     if (seen.has(normalize(name))) {
@@ -92,7 +127,7 @@ function categories(args: Args, catalog: AdvisorCatalog, problems: string[]): Ca
 
 function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): AccountDraft[] {
   const seen = new Set(catalog.accounts.map((a) => normalize(a.name)));
-  return list(args, "cuentas").flatMap((item): AccountDraft[] => {
+  return list(args, "cuentas", problems).flatMap((item): AccountDraft[] => {
     const name = text(item.name, 100);
     if (!name) return [];
     if (seen.has(normalize(name))) {
@@ -115,10 +150,12 @@ function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): Acco
   });
 }
 
-function transactions(args: Args, catalog: AdvisorCatalog, problems: string[]): TransactionDraft[] {
+function transactions(args: Args, catalog: AdvisorCatalog, problems: string[], userText: string): TransactionDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
-  return list(args, "transacciones").flatMap((item, i): TransactionDraft[] => {
+  const rows = list(args, "transacciones", problems, MAX_TRANSACTIONS);
+  const known = rows.length >= VERIFY_FROM_ITEMS ? amountsIn(userText) : null;
+  return rows.flatMap((item, i): TransactionDraft[] => {
     const type = item.type === "ingreso" ? "ingreso" : "egreso";
     const amount = positive(item.amount);
     const date = isoDate(item.date);
@@ -140,6 +177,10 @@ function transactions(args: Args, catalog: AdvisorCatalog, problems: string[]): 
         accountId: account.id,
         accountName: account.name,
         description: text(item.description, 500),
+        warning:
+          known && !known.has(amount)
+            ? "Este monto no aparece en lo que escribiste: revísalo antes de registrarlo."
+            : undefined,
       },
     ];
   });
@@ -149,7 +190,7 @@ function budgets(args: Args, catalog: AdvisorCatalog, problems: string[], existi
   const fail = rejecter(problems);
   const find = lookup(catalog);
   const [ty] = todayInBogota().split("-").map(Number);
-  return list(args, "presupuestos").flatMap((item): BudgetDraft[] => {
+  return list(args, "presupuestos", problems).flatMap((item): BudgetDraft[] => {
     const category = find.category(item.categoryId);
     const amount = positive(item.amount);
     const year = intIn(item.year, ty - 1, ty + 2);
@@ -174,7 +215,7 @@ function budgets(args: Args, catalog: AdvisorCatalog, problems: string[], existi
 function debts(args: Args, catalog: AdvisorCatalog, problems: string[]): DebtDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
-  return list(args, "deudas").flatMap((item): DebtDraft[] => {
+  return list(args, "deudas", problems).flatMap((item): DebtDraft[] => {
     const name = text(item.name, 200);
     const payee = text(item.payee, 200);
     const totalAmount = positive(item.totalAmount);
@@ -205,7 +246,7 @@ function debts(args: Args, catalog: AdvisorCatalog, problems: string[]): DebtDra
 function debtPayments(args: Args, catalog: AdvisorCatalog, problems: string[]): DebtPaymentDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
-  return list(args, "abonos").flatMap((item): DebtPaymentDraft[] => {
+  return list(args, "abonos", problems).flatMap((item): DebtPaymentDraft[] => {
     const debt = find.debt(item.debtId);
     const amount = positive(item.amount);
     const account = find.account(item.accountId);
@@ -238,7 +279,7 @@ const FREQUENCIES = ["weekly", "biweekly", "monthly", "bimonthly"] as const;
 function recurring(args: Args, catalog: AdvisorCatalog, problems: string[]): RecurringDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
-  return list(args, "pagos").flatMap((item): RecurringDraft[] => {
+  return list(args, "pagos", problems).flatMap((item): RecurringDraft[] => {
     const name = text(item.name, 200);
     const payeeName = text(item.payeeName, 200);
     const account = find.account(item.fromAccountId);
@@ -263,11 +304,16 @@ function recurring(args: Args, catalog: AdvisorCatalog, problems: string[]): Rec
   });
 }
 
+/**
+ * @param userText lo que escribió el usuario en la conversación: los montos de
+ * una lista larga se verifican contra él para marcar los que el modelo inventó.
+ */
 export function checkProposal(
   name: ProposalToolName,
   args: Args,
   catalog: AdvisorCatalog,
   existingBudgets: Budget[],
+  userText = "",
 ): ProposalCheck {
   const problems: string[] = [];
   const message = text(args.mensaje, 2000);
@@ -281,7 +327,7 @@ export function checkProposal(
       case "proponer_cuentas":
         return wrap("accounts", accounts(args, catalog, problems));
       case "proponer_transacciones":
-        return wrap("transactions", transactions(args, catalog, problems));
+        return wrap("transactions", transactions(args, catalog, problems, userText));
       case "proponer_presupuestos":
         return wrap("budgets", budgets(args, catalog, problems, existingBudgets));
       case "proponer_deudas":
@@ -294,4 +340,22 @@ export function checkProposal(
   })();
 
   return { message, proposal, problems };
+}
+
+/**
+ * Une dos propuestas del mismo tipo hechas en la misma respuesta (el modelo
+ * puede partir una tabla larga en varias llamadas). Devuelve null si son de
+ * tipos distintos.
+ */
+export function mergeChecks(base: ProposalCheck, extra: ProposalCheck): ProposalCheck | null {
+  if (!base.proposal || !extra.proposal || base.proposal.kind !== extra.proposal.kind) return null;
+  const max = maxItems(base.proposal.kind);
+  const items = [...base.proposal.items, ...extra.proposal.items];
+  const problems = [...base.problems, ...extra.problems];
+  if (items.length > max) problems.push(`Solo se aceptan ${max} ítems por propuesta; se descartaron ${items.length - max}.`);
+  return {
+    message: base.message ?? extra.message,
+    proposal: { kind: base.proposal.kind, items: items.slice(0, max) } as ProposalData,
+    problems,
+  };
 }

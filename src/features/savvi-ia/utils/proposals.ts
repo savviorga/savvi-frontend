@@ -10,7 +10,15 @@ import type {
   ProposalData,
   ProposalItemResult,
   ProposalKind,
+  TransactionDraft,
 } from "../types/proposal.types";
+import type { CreateTransactionDto } from "@/features/transactions/types/transactions.types";
+
+/**
+ * Transacciones por petición a `POST /transactions/bulk`. Los lotes se envían
+ * en cola, uno tras otro, para no saturar la base de datos con una tabla larga.
+ */
+export const TRANSACTION_BATCH_SIZE = 20;
 
 export const formatCop = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -44,8 +52,13 @@ export const PROPOSAL_META: Record<
 export const proposalNoun = (kind: ProposalKind, count: number) =>
   count === 1 ? PROPOSAL_META[kind].one : PROPOSAL_META[kind].many;
 
+/** Los ítems con advertencia (monto no verificado) arrancan desmarcados. */
 export const toProposal = (data: ProposalData): Proposal =>
-  ({ ...data, status: "pending", selected: data.items.map(() => true) }) as Proposal;
+  ({
+    ...data,
+    status: "pending",
+    selected: data.items.map((item) => !("warning" in item && item.warning)),
+  }) as Proposal;
 
 export type BadgeTone = "income" | "expense" | "credit" | "neutral";
 
@@ -56,6 +69,7 @@ export interface ProposalItemView {
   /** Monto destacado a la derecha */
   amount?: { value: number; tone: BadgeTone };
   color?: string;
+  warning?: string;
 }
 
 const join = (...parts: (string | number | null | undefined | false)[]) => parts.filter(Boolean).join(" · ");
@@ -87,6 +101,7 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
         title: item.description || item.categoryName,
         detail: join(shortDate(item.date), item.categoryName, item.accountName),
         amount: { value: item.amount, tone: item.type === "ingreso" ? "income" : "expense" },
+        warning: item.warning,
       }));
     case "budgets":
       return proposal.items.map((item) => ({
@@ -179,6 +194,15 @@ const errorText = (error: unknown): string =>
       ? error.message
       : "Error inesperado";
 
+const toTransactionDto = (t: TransactionDraft): CreateTransactionDto => ({
+  date: t.date,
+  type: t.type,
+  amount: t.amount,
+  category: t.categoryId,
+  account: t.accountId,
+  description: t.description,
+});
+
 /** Envía un ítem a su endpoint real con el payload exacto del DTO del backend. */
 async function executeItem(proposal: ProposalData, index: number): Promise<void> {
   switch (proposal.kind) {
@@ -188,18 +212,9 @@ async function executeItem(proposal: ProposalData, index: number): Promise<void>
     case "accounts":
       await AccountService.create(proposal.items[index]);
       return;
-    case "transactions": {
-      const t = proposal.items[index];
-      await TransactionService.create({
-        date: t.date,
-        type: t.type,
-        amount: t.amount,
-        category: t.categoryId,
-        account: t.accountId,
-        description: t.description,
-      });
+    case "transactions":
+      await TransactionService.create(toTransactionDto(proposal.items[index]));
       return;
-    }
     case "budgets": {
       const b = proposal.items[index];
       await BudgetService.createOrUpdate({
@@ -255,18 +270,50 @@ async function executeItem(proposal: ProposalData, index: number): Promise<void>
   }
 }
 
-/** Ejecuta en orden los ítems seleccionados, avisando el resultado de cada uno. */
-export async function executeSelectedItems(
-  proposal: Proposal,
-  onResult: (index: number, result: ProposalItemResult) => void,
+type ResultHandler = (index: number, result: ProposalItemResult) => void;
+
+async function executeOne(proposal: ProposalData, index: number, onResult: ResultHandler): Promise<void> {
+  try {
+    await executeItem(proposal, index);
+    onResult(index, { ok: true });
+  } catch (error) {
+    onResult(index, { ok: false, error: errorText(error) });
+  }
+}
+
+/** Lote rechazado antes de guardar (validación): el backend no insertó ninguna fila. */
+const isRejectedBatch = (error: unknown) => isApiError(error) && error.statusCode >= 400 && error.statusCode < 500;
+
+/**
+ * Transacciones en cola de lotes de {@link TRANSACTION_BATCH_SIZE}: un lote no
+ * sale hasta que el anterior terminó. Si el backend rechaza un lote por
+ * validación, se reintenta fila por fila para marcar exactamente cuál falló;
+ * si falla por red o servidor no se reintenta, para no duplicar registros.
+ */
+async function executeTransactionBatches(
+  proposal: Extract<ProposalData, { kind: "transactions" }>,
+  indexes: number[],
+  onResult: ResultHandler,
 ): Promise<void> {
-  for (let index = 0; index < proposal.items.length; index += 1) {
-    if (!proposal.selected[index]) continue;
+  for (let start = 0; start < indexes.length; start += TRANSACTION_BATCH_SIZE) {
+    const batch = indexes.slice(start, start + TRANSACTION_BATCH_SIZE);
     try {
-      await executeItem(proposal, index);
-      onResult(index, { ok: true });
+      await TransactionService.bulk(batch.map((index) => toTransactionDto(proposal.items[index])));
+      batch.forEach((index) => onResult(index, { ok: true }));
     } catch (error) {
-      onResult(index, { ok: false, error: errorText(error) });
+      if (isRejectedBatch(error)) {
+        for (const index of batch) await executeOne(proposal, index, onResult);
+      } else {
+        const result: ProposalItemResult = { ok: false, error: errorText(error) };
+        batch.forEach((index) => onResult(index, result));
+      }
     }
   }
+}
+
+/** Ejecuta en orden los ítems seleccionados, avisando el resultado de cada uno. */
+export async function executeSelectedItems(proposal: Proposal, onResult: ResultHandler): Promise<void> {
+  const indexes = proposal.items.map((_, index) => index).filter((index) => proposal.selected[index]);
+  if (proposal.kind === "transactions") return executeTransactionBatches(proposal, indexes, onResult);
+  for (const index of indexes) await executeOne(proposal, index, onResult);
 }

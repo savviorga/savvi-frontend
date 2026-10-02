@@ -26,7 +26,7 @@ export interface AccountDraft {
   dueDay?: number;
 }
 
-/** `POST /transactions` */
+/** `POST /transactions/bulk`, por lotes */
 export interface TransactionDraft {
   date: string;
   type: "ingreso" | "egreso";
@@ -36,6 +36,8 @@ export interface TransactionDraft {
   accountId: string;
   accountName: string;
   description?: string;
+  /** El monto no aparece en el texto del usuario: la tarjeta lo muestra y lo deja desmarcado */
+  warning?: string;
 }
 
 /** `POST /budgets` (crea o actualiza el de esa categoría y mes) */

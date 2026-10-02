@@ -11,7 +11,7 @@ import {
   type ReadToolName,
 } from "@/lib/ai/advisor/tools";
 import { describeReadStep, runReadTool } from "@/lib/ai/advisor/read-tools";
-import { checkProposal, type ProposalCheck } from "@/lib/ai/advisor/proposals";
+import { checkProposal, mergeChecks, type ProposalCheck } from "@/lib/ai/advisor/proposals";
 import { sanitizeChart } from "@/lib/ai/advisor/charts";
 import { addUsage, emptyUsage, type OpenAIUsage } from "@/lib/ai/pricing";
 import type { AdvisorEvent, AdvisorMessage, AdvisorUsage } from "@/features/savvi-ia/types/proposal.types";
@@ -19,12 +19,16 @@ import type { AdvisorEvent, AdvisorMessage, AdvisorUsage } from "@/features/savv
 export const runtime = "nodejs";
 
 const MAX_MESSAGE_LENGTH = 4000;
+/** Mensajes del asesor en el historial: incluyen el resumen de propuestas de hasta 100 ítems. */
+const MAX_ASSISTANT_HISTORY_LENGTH = 15_000;
 /** ~10 páginas de texto pegado por el usuario. */
 const MAX_USER_MESSAGE_LENGTH = 30_000;
 /** Solo se envían los últimos mensajes: acota el costo por petición. */
 const MAX_HISTORY = 30;
 /** Rondas de herramientas antes de obligar al modelo a responder. */
 const MAX_ROUNDS = 5;
+/** Alcanza para proponer una tabla de 100 transacciones en una sola respuesta. */
+const MAX_OUTPUT_TOKENS = 16_000;
 const MAX_TOOL_RESULT_CHARS = 12_000;
 
 interface ChatTurn {
@@ -65,7 +69,7 @@ function readMessages(raw: unknown): ChatTurn[] {
     .slice(-MAX_HISTORY)
     .map(({ role, content }) => ({
       role,
-      content: content.trim().slice(0, role === "user" ? MAX_USER_MESSAGE_LENGTH : MAX_MESSAGE_LENGTH),
+      content: content.trim().slice(0, role === "user" ? MAX_USER_MESSAGE_LENGTH : MAX_ASSISTANT_HISTORY_LENGTH),
     }));
 }
 
@@ -73,14 +77,19 @@ const isReadTool = (name: string): name is ReadToolName => (READ_TOOL_NAMES as r
 const isProposalTool = (name: string): name is ProposalToolName =>
   (PROPOSAL_TOOL_NAMES as readonly string[]).includes(name);
 
-function parseArgs(call: ToolCall): Record<string, unknown> {
+/** null si los argumentos no son JSON válido (p. ej. la respuesta se cortó). */
+function parseArgs(call: ToolCall): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(call.function?.arguments ?? "{}");
+    const parsed = JSON.parse(call.function?.arguments || "{}");
     return typeof parsed === "object" && parsed !== null ? parsed : {};
   } catch {
-    return {};
+    return null;
   }
 }
+
+const TRUNCATED_ARGS = [
+  "Los argumentos llegaron incompletos: la lista era demasiado larga para una sola llamada. Divídela en varias llamadas de máximo 50 ítems en esta misma respuesta; la app las une en una sola tarjeta.",
+];
 
 const cleanList = (value: unknown, maxItems: number, maxLength: number): string[] =>
   Array.isArray(value)
@@ -130,6 +139,10 @@ async function runAdvisor(
   emit: (event: AdvisorEvent) => void,
   usage: AdvisorUsage,
 ): Promise<ReplyEvent> {
+  const userText = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
   const conversation: ModelMessage[] = [
     { role: "system", content: ADVISOR_PROMPT },
     { role: "system", content: `SITUACIÓN ACTUAL DEL USUARIO:\n${snapshot.prompt}` },
@@ -145,7 +158,7 @@ async function runAdvisor(
     }>("/chat/completions", {
       model: CHAT_MODEL,
       temperature: 0.6,
-      max_tokens: 1400,
+      max_tokens: MAX_OUTPUT_TOKENS,
       tools: ADVISOR_TOOLS,
       tool_choice: lastRound ? "none" : "auto",
       response_format: REPLY_FORMAT,
@@ -167,19 +180,25 @@ async function runAdvisor(
       let result: unknown;
 
       if (isReadTool(name)) {
-        emit({ type: "step", step: { label: describeReadStep(name, args, snapshot.catalog) } });
+        emit({ type: "step", step: { label: describeReadStep(name, args ?? {}, snapshot.catalog) } });
         try {
-          result = await runReadTool(name, args, data, snapshot.catalog);
+          result = await runReadTool(name, args ?? {}, data, snapshot.catalog);
         } catch (error) {
           result = { error: error instanceof Error ? error.message : "No se pudo consultar." };
         }
-      } else if (isProposalTool(name) && !accepted) {
+      } else if (isProposalTool(name)) {
         emit({ type: "step", step: { label: "Preparando una propuesta para ti" } });
-        const check = checkProposal(name, args, snapshot.catalog, await data.getBudgets().catch(() => []));
-        if (check.proposal) accepted = check;
-        result = check.proposal
-          ? { ok: true, descartados: check.problems }
-          : { ok: false, problemas: check.problems.length ? check.problems : ["La lista quedó vacía."] };
+        const check = args
+          ? checkProposal(name, args, snapshot.catalog, await data.getBudgets().catch(() => []), userText)
+          : { proposal: null, problems: TRUNCATED_ARGS };
+        // Varias llamadas del mismo tipo en una respuesta se unen en una sola tarjeta.
+        const merged: ProposalCheck | null = check.proposal && accepted ? mergeChecks(accepted, check) : check.proposal ? check : null;
+        if (merged) accepted = merged;
+        result = !check.proposal
+          ? { ok: false, problemas: check.problems.length ? check.problems : ["La lista quedó vacía."] }
+          : merged
+            ? { ok: true, descartados: check.problems }
+            : { ok: false, problemas: ["Propón un solo tipo de acción por respuesta."] };
       } else {
         result = { error: "Herramienta no disponible en este turno." };
       }

@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Check,
   CheckCircle2,
@@ -15,7 +16,14 @@ import {
   XCircle,
 } from "lucide-react";
 import type { Proposal, ProposalKind } from "../types/proposal.types";
-import { PROPOSAL_META, formatCop, proposalNoun, toItemViews, type BadgeTone } from "../utils/proposals";
+import {
+  PROPOSAL_META,
+  TRANSACTION_BATCH_SIZE,
+  formatCop,
+  proposalNoun,
+  toItemViews,
+  type BadgeTone,
+} from "../utils/proposals";
 
 interface SavviIAProposalCardProps {
   proposal: Proposal;
@@ -62,6 +70,11 @@ export default function SavviIAProposalCard({
   const isPending = proposal.status === "pending";
   const isCreating = proposal.status === "creating";
   const doneCount = proposal.results?.filter((r) => r?.ok).length ?? 0;
+  const failedCount = proposal.results?.filter((r) => r && !r.ok).length ?? 0;
+  const processed = doneCount + failedCount;
+  const progress = selectedCount ? Math.round((processed / selectedCount) * 100) : 0;
+  const batchCount = proposal.kind === "transactions" ? Math.ceil(selectedCount / TRANSACTION_BATCH_SIZE) : 0;
+  const currentBatch = Math.min(Math.floor(processed / TRANSACTION_BATCH_SIZE) + 1, batchCount);
   const HeaderIcon = KIND_ICON[proposal.kind];
   const total = items.reduce((sum, item, i) => sum + (proposal.selected[i] && item.amount ? item.amount.value : 0), 0);
   const showTotal = items.length > 1 && items.every((item) => item.amount);
@@ -82,7 +95,25 @@ export default function SavviIAProposalCard({
         )}
       </div>
 
-      <ul className="divide-y divide-slate-100">
+      {isCreating && (
+        <div className="border-b border-slate-100 px-4 py-2.5" role="status" aria-live="polite">
+          <div className="flex items-center justify-between text-xs text-slate-600">
+            <span>
+              Guardando {processed} de {selectedCount}
+              {batchCount > 1 && ` · lote ${currentBatch} de ${batchCount}`}
+            </span>
+            <span className="tabular-nums">{progress}%</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <ul className={`divide-y divide-slate-100 ${items.length > 8 ? "max-h-[26rem] overflow-y-auto" : ""}`}>
         {items.map((item, index) => {
           const checked = proposal.selected[index];
           const result = proposal.results?.[index];
@@ -126,6 +157,12 @@ export default function SavviIAProposalCard({
                     )}
                   </span>
                   {item.detail && <span className="mt-0.5 block text-xs text-slate-500">{item.detail}</span>}
+                  {item.warning && !result && (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                      {item.warning}
+                    </span>
+                  )}
                   {result && !result.ok && <span className="mt-0.5 block text-xs text-red-600">{result.error}</span>}
                 </span>
 
@@ -153,6 +190,7 @@ export default function SavviIAProposalCard({
           <p className="savvi-msg-in mr-auto flex items-center gap-1.5 text-xs font-medium text-emerald-700">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
             {doneCount} {proposalNoun(proposal.kind, doneCount)} {doneCount === 1 ? meta.done : meta.doneMany}
+            {failedCount > 0 && <span className="text-red-600">· {failedCount} con error</span>}
           </p>
         )}
 
@@ -173,7 +211,7 @@ export default function SavviIAProposalCard({
               className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-emerald-500/30 transition-all hover:scale-[1.03] hover:shadow-md active:scale-95 disabled:scale-100 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
             >
               {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
-              {isCreating ? "Guardando..." : `${meta.verb} ${selectedCount}`}
+              {isCreating ? `Guardando ${processed}/${selectedCount}...` : `${meta.verb} ${selectedCount}`}
             </button>
           </>
         )}

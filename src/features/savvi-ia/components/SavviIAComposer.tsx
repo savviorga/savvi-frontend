@@ -164,7 +164,7 @@ export default function SavviIAComposer({
           id="savvi-ia-message"
           ref={textareaRef}
           rows={1}
-          maxLength={500}
+          maxLength={30_000}
           value={message}
           onChange={(event) => {
             setMessage(event.target.value);

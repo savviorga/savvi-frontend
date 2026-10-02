@@ -19,6 +19,8 @@ import type { AdvisorEvent, AdvisorMessage, AdvisorUsage } from "@/features/savv
 export const runtime = "nodejs";
 
 const MAX_MESSAGE_LENGTH = 4000;
+/** ~10 páginas de texto pegado por el usuario. */
+const MAX_USER_MESSAGE_LENGTH = 30_000;
 /** Solo se envían los últimos mensajes: acota el costo por petición. */
 const MAX_HISTORY = 30;
 /** Rondas de herramientas antes de obligar al modelo a responder. */
@@ -61,7 +63,10 @@ function readMessages(raw: unknown): ChatTurn[] {
         item.content.trim().length > 0,
     )
     .slice(-MAX_HISTORY)
-    .map(({ role, content }) => ({ role, content: content.trim().slice(0, MAX_MESSAGE_LENGTH) }));
+    .map(({ role, content }) => ({
+      role,
+      content: content.trim().slice(0, role === "user" ? MAX_USER_MESSAGE_LENGTH : MAX_MESSAGE_LENGTH),
+    }));
 }
 
 const isReadTool = (name: string): name is ReadToolName => (READ_TOOL_NAMES as readonly string[]).includes(name);

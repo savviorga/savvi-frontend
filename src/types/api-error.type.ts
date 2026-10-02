@@ -19,3 +19,9 @@ export function getErrorMessages(error: ApiError): string[] {
   }
   return [error.message];
 }
+
+/** Primer mensaje del API, o `fallback` si el error no viene del backend. */
+export function getFirstErrorMessage(error: unknown, fallback: string): string {
+  if (isApiError(error)) return getErrorMessages(error)[0] ?? fallback;
+  return fallback;
+}

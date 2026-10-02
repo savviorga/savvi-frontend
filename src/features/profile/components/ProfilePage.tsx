@@ -13,6 +13,7 @@ import ProfileTopCategories from "./ProfileTopCategories";
 import ProfileActivity from "./ProfileActivity";
 import ProfileEditForm from "./ProfileEditForm";
 import ProfileSecurityCard from "./ProfileSecurityCard";
+import ProfileTwoFactorCard from "./ProfileTwoFactorCard";
 
 type TabId = "overview" | "edit" | "security";
 
@@ -37,7 +38,17 @@ function ProfileSkeleton() {
 }
 
 export default function ProfilePage() {
-  const { summary, loading, error, reload, update, changePassword } = useProfile();
+  const {
+    summary,
+    loading,
+    error,
+    reload,
+    update,
+    changePassword,
+    requestTwoFactorEnable,
+    confirmTwoFactorEnable,
+    disableTwoFactor,
+  } = useProfile();
   const [tab, setTab] = useState<TabId>("overview");
 
   if (loading && !summary) return <ProfileSkeleton />;
@@ -98,7 +109,18 @@ export default function ProfilePage() {
 
         {tab === "edit" && <ProfileEditForm user={user} onSave={update} />}
 
-        {tab === "security" && <ProfileSecurityCard onChangePassword={changePassword} />}
+        {tab === "security" && (
+          <div className="space-y-5">
+            <ProfileTwoFactorCard
+              enabled={!!user.twoFactorEnabled}
+              email={user.email}
+              onRequestEnable={requestTwoFactorEnable}
+              onConfirmEnable={confirmTwoFactorEnable}
+              onDisable={disableTwoFactor}
+            />
+            <ProfileSecurityCard onChangePassword={changePassword} />
+          </div>
+        )}
       </div>
     </div>
   );

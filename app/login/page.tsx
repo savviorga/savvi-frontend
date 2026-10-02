@@ -1,10 +1,18 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import LoginForm from "@/features/auth/components/LoginForm";
 import LoginPageLayout from "@/features/auth/components/LoginPageLayout";
+import TwoFactorLoginForm from "@/features/auth/components/TwoFactorLoginForm";
+
+/** Reto 2FA en curso: solo en memoria, nunca en `localStorage`. */
+type TwoFactorStep = {
+  twoFactorToken: string;
+  email: string;
+  codeSentAt: number;
+};
 
 const DEFAULT_REDIRECT = "/transactions";
 
@@ -18,8 +26,10 @@ function safeRedirectUrl(callbackUrl: string | null): string {
 function LoginPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { login, loading, isAuthenticated, status } = useAuth();
+  const { login, verifyTwoFactor, loading, isAuthenticated, status } = useAuth();
   const initialCheckDone = useRef(false);
+  const [twoFactor, setTwoFactor] = useState<TwoFactorStep | null>(null);
+  const [lastEmail, setLastEmail] = useState("");
 
   const callbackUrl = useMemo(
     () => safeRedirectUrl(searchParams.get("callbackUrl")),
@@ -36,10 +46,31 @@ function LoginPageInner() {
   }, [isAuthenticated, status, callbackUrl, router]);
 
   const handleSubmit = async (data: { email: string; password: string }) => {
+    setLastEmail(data.email);
     const result = await login(data, { callbackUrl });
+    if (result.twoFactor) {
+      setTwoFactor({
+        twoFactorToken: result.twoFactor.twoFactorToken,
+        email: data.email,
+        codeSentAt: Date.now(),
+      });
+      return { success: false };
+    }
     if (result.success && result.callbackUrl) {
       router.replace(result.callbackUrl);
       return { success: true };
+    }
+    return result;
+  };
+
+  const handleVerify = async (code: string) => {
+    if (!twoFactor) return { success: false as const, error: "", restart: true };
+    const result = await verifyTwoFactor(
+      { twoFactorToken: twoFactor.twoFactorToken, code },
+      { callbackUrl },
+    );
+    if (result.success && result.callbackUrl) {
+      router.replace(result.callbackUrl);
     }
     return result;
   };
@@ -56,7 +87,21 @@ function LoginPageInner() {
 
   return (
     <LoginPageLayout>
-      <LoginForm onSubmit={handleSubmit} loading={loading} />
+      {twoFactor ? (
+        <TwoFactorLoginForm
+          twoFactorToken={twoFactor.twoFactorToken}
+          email={twoFactor.email}
+          codeSentAt={twoFactor.codeSentAt}
+          onVerify={handleVerify}
+          onRestart={() => setTwoFactor(null)}
+        />
+      ) : (
+        <LoginForm
+          onSubmit={handleSubmit}
+          loading={loading}
+          initialEmail={lastEmail}
+        />
+      )}
     </LoginPageLayout>
   );
 }

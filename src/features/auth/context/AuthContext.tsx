@@ -9,8 +9,14 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { AuthService } from "../services/auth.service";
-import type { User } from "../types/auth.type";
-import { LoginDto, RegisterDto } from "../types/auth.type";
+import type {
+  AuthResponse,
+  LoginDto,
+  RegisterDto,
+  TwoFactorChallenge,
+  User,
+  VerifyTwoFactorDto,
+} from "../types/auth.type";
 
 const STORAGE_KEY = "savvi_auth";
 
@@ -42,6 +48,11 @@ function saveStored(auth: StoredAuth): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
 }
 
+/** Con 2FA activo el login no abre sesión: devuelve el reto para pedir el código. */
+export type LoginResult =
+  | { success: true; callbackUrl: string }
+  | { success: false; twoFactor: TwoFactorChallenge };
+
 type AuthContextValue = {
   user: User | null;
   access_token: string | null;
@@ -49,6 +60,10 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   login: (
     payload: LoginDto,
+    options?: { callbackUrl?: string }
+  ) => Promise<LoginResult>;
+  verifyTwoFactor: (
+    payload: VerifyTwoFactorDto,
     options?: { callbackUrl?: string }
   ) => Promise<{ success: boolean; callbackUrl?: string }>;
   register: (
@@ -78,23 +93,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  const startSession = useCallback((data: AuthResponse) => {
+    const auth: StoredAuth = {
+      user: data.user,
+      access_token: data.access_token,
+    };
+    saveStored(auth);
+    setUser(auth.user);
+    setAccessToken(auth.access_token);
+  }, []);
+
   const login = useCallback(
     async (
       payload: LoginDto,
       options?: { callbackUrl?: string }
-    ): Promise<{ success: boolean; callbackUrl?: string }> => {
+    ): Promise<LoginResult> => {
       const callbackUrl = options?.callbackUrl ?? "/transactions";
       const data = await AuthService.login(payload);
-      const auth: StoredAuth = {
-        user: data.user,
-        access_token: data.access_token,
-      };
-      saveStored(auth);
-      setUser(auth.user);
-      setAccessToken(auth.access_token);
+      if (data.requiresTwoFactor) {
+        return { success: false, twoFactor: data };
+      }
+      startSession(data);
       return { success: true, callbackUrl };
     },
-    []
+    [startSession]
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (
+      payload: VerifyTwoFactorDto,
+      options?: { callbackUrl?: string }
+    ): Promise<{ success: boolean; callbackUrl?: string }> => {
+      const callbackUrl = options?.callbackUrl ?? "/transactions";
+      startSession(await AuthService.verifyTwoFactor(payload));
+      return { success: true, callbackUrl };
+    },
+    [startSession]
   );
 
   const register = useCallback(
@@ -103,17 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options?: { callbackUrl?: string }
     ): Promise<{ success: boolean; callbackUrl?: string }> => {
       const callbackUrl = options?.callbackUrl ?? "/transactions";
-      const data = await AuthService.register(payload);
-      const auth: StoredAuth = {
-        user: data.user,
-        access_token: data.access_token,
-      };
-      saveStored(auth);
-      setUser(auth.user);
-      setAccessToken(auth.access_token);
+      startSession(await AuthService.register(payload));
       return { success: true, callbackUrl };
     },
-    []
+    [startSession]
   );
 
   const logout = useCallback(() => {
@@ -139,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAuthenticated: !!user,
     login,
+    verifyTwoFactor,
     register,
     logout,
     getToken,

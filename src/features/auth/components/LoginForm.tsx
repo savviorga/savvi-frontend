@@ -11,14 +11,27 @@ import GoogleGlyph from "./GoogleGlyph";
 interface LoginFormProps {
   onSubmit: (data: LoginDto) => Promise<{ success: boolean }>;
   loading?: boolean;
+  /** Email precargado, p. ej. al volver desde la verificación en dos pasos. */
+  initialEmail?: string;
 }
 
-export default function LoginForm({ onSubmit, loading = false }: LoginFormProps) {
-  const [form, setForm] = useState<LoginDto>({ email: "", password: "" });
+export default function LoginForm({
+  onSubmit,
+  loading = false,
+  initialEmail = "",
+}: LoginFormProps) {
+  const [form, setForm] = useState<LoginDto>({
+    email: initialEmail,
+    password: "",
+  });
   const [rememberMe, setRememberMe] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const busy = loading || submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Un doble submit con 2FA activo responde 429 (el código se reenvía cada 60 s).
+    if (busy) return;
     if (rememberMe) {
       try {
         localStorage.setItem("savvi_login_remember", "1");
@@ -32,8 +45,12 @@ export default function LoginForm({ onSubmit, loading = false }: LoginFormProps)
         /* ignore */
       }
     }
-    const result = await onSubmit(form);
-    if (result.success) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -97,25 +114,20 @@ export default function LoginForm({ onSubmit, loading = false }: LoginFormProps)
             />
             Recordarme
           </label>
-          <button
-            type="button"
+          <Link
+            href="/forgot-password"
             className="text-sm font-medium text-mint hover:text-mint-dim hover:underline"
-            onClick={() =>
-              toast("Recuperación de contraseña disponible pronto.", {
-                icon: "🔐",
-              })
-            }
           >
             ¿Olvidaste tu contraseña?
-          </button>
+          </Link>
         </div>
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={busy}
           className="flex h-12 w-full items-center justify-center rounded-lg border border-slate-200 bg-white text-base font-semibold text-slate-900 shadow-sm transition-[box-shadow,background-color] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/30 disabled:pointer-events-none disabled:opacity-60"
         >
-          {loading ? "Entrando…" : "Entrar a Savvi"}
+          {busy ? "Entrando…" : "Entrar a Savvi"}
         </button>
       </form>
 

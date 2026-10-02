@@ -12,6 +12,21 @@ export interface ChangePasswordDto {
   newPassword: string;
 }
 
+/** `POST /auth/2fa/enable/confirm` */
+export interface ConfirmTwoFactorDto {
+  code: string;
+}
+
+/** `POST /auth/2fa/disable` */
+export interface DisableTwoFactorDto {
+  password: string;
+}
+
+export interface TwoFactorStatusResponse {
+  message: string;
+  twoFactorEnabled: boolean;
+}
+
 export interface MonthlySummary {
   /** `YYYY-MM` */
   month: string;

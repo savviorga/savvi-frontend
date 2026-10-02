@@ -35,16 +35,22 @@ export function useProfile() {
         ProfileService.getSummary(),
         CategoryService.getAll().catch(() => []),
       ]);
+      // Si el resumen no trae el estado del 2FA, se toma de `GET /profile`.
+      const user =
+        data.user.twoFactorEnabled === undefined
+          ? await ProfileService.get().catch(() => data.user)
+          : data.user;
       // Las transacciones guardan el id de la categoría: se muestra su nombre.
       const names = new Map(categories.map((c) => [c.id, c.name]));
       setSummary({
         ...data,
+        user,
         topExpenseCategories: data.topExpenseCategories.map((c) => ({
           ...c,
           category: names.get(c.category) ?? c.category,
         })),
       });
-      updateUser(data.user);
+      updateUser(user);
     } catch (err) {
       console.error("Error loading profile summary:", err);
       setError(isApiError(err) ? getErrorMessages(err)[0] : "No pudimos cargar tu perfil.");
@@ -80,5 +86,54 @@ export function useProfile() {
     }
   };
 
-  return { summary, loading, error, reload: load, update, changePassword };
+  const setTwoFactorEnabled = (twoFactorEnabled: boolean) => {
+    if (!summary) return;
+    const user = { ...summary.user, twoFactorEnabled };
+    updateUser(user);
+    setSummary((prev) => (prev ? { ...prev, user } : prev));
+  };
+
+  /** Envía el código de activación al email del usuario. */
+  const requestTwoFactorEnable = async (): Promise<MutationResult> => {
+    try {
+      await ProfileService.enableTwoFactor();
+      return { ok: true, data: undefined };
+    } catch (err) {
+      return toFailure(err, "No pudimos enviar el código.");
+    }
+  };
+
+  const confirmTwoFactorEnable = async (code: string): Promise<MutationResult> => {
+    try {
+      const { message, twoFactorEnabled } = await ProfileService.confirmTwoFactor({ code });
+      setTwoFactorEnabled(twoFactorEnabled);
+      toast.success(message || "Verificación en dos pasos activada");
+      return { ok: true, data: undefined };
+    } catch (err) {
+      return toFailure(err, "No pudimos verificar el código.");
+    }
+  };
+
+  const disableTwoFactor = async (password: string): Promise<MutationResult> => {
+    try {
+      const { message, twoFactorEnabled } = await ProfileService.disableTwoFactor({ password });
+      setTwoFactorEnabled(twoFactorEnabled);
+      toast.success(message || "Verificación en dos pasos desactivada");
+      return { ok: true, data: undefined };
+    } catch (err) {
+      return toFailure(err, "No pudimos desactivar la verificación en dos pasos.");
+    }
+  };
+
+  return {
+    summary,
+    loading,
+    error,
+    reload: load,
+    update,
+    changePassword,
+    requestTwoFactorEnable,
+    confirmTwoFactorEnable,
+    disableTwoFactor,
+  };
 }

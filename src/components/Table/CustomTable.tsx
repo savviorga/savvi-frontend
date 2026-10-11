@@ -9,7 +9,21 @@ export interface Column<T> {
   header: string;
   className?: string;
   render: (row: T) => ReactNode;
+  /** En la vista de tarjetas ocupa todo el ancho, sin la etiqueta de la columna. */
+  mobileFullWidth?: boolean;
 }
+
+/**
+ * Ancho de pantalla desde el que se muestra la tabla; por debajo, tarjetas.
+ * Con el sidebar (248px) una tabla de muchas columnas no cabe en `md` sin scroll horizontal.
+ */
+type TableBreakpoint = "md" | "lg" | "xl";
+
+const BREAKPOINT_CLASSES: Record<TableBreakpoint, { table: string; cards: string }> = {
+  md: { table: "md:block", cards: "md:hidden" },
+  lg: { table: "lg:block", cards: "lg:hidden" },
+  xl: { table: "xl:block", cards: "xl:hidden" },
+};
 
 interface CustomTableProps<T> {
   data: T[];
@@ -20,6 +34,10 @@ interface CustomTableProps<T> {
   /** Página actual cuando el padre la controla (p. ej. porque él pagina los datos). */
   page?: number;
   onPageChange?: (page: number) => void;
+  /** @default "md" */
+  tableBreakpoint?: TableBreakpoint;
+  /** Clases extra por fila; se aplican al `<tr>` y a la tarjeta móvil. */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 export default function CustomTable<T>({
@@ -30,7 +48,10 @@ export default function CustomTable<T>({
   totalPages,
   page: controlledPage,
   onPageChange,
+  tableBreakpoint = "md",
+  rowClassName,
 }: CustomTableProps<T>) {
+  const breakpoint = BREAKPOINT_CLASSES[tableBreakpoint];
   const [internalPage, setInternalPage] = useState(1);
   const page = controlledPage ?? internalPage;
 
@@ -81,9 +102,9 @@ export default function CustomTable<T>({
         </div>
       )}
 
-      {/* ── Desktop: tabla clásica (hidden en < md) ── */}
+      {/* ── Desktop: tabla clásica (oculta por debajo de `tableBreakpoint`) ── */}
       {!loading && data.length > 0 && (
-        <div className="hidden overflow-x-auto md:block">
+        <div className={`hidden overflow-x-auto ${breakpoint.table}`}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/80">
@@ -103,7 +124,7 @@ export default function CustomTable<T>({
                   key={rowKey(row)}
                   className={`group transition-colors duration-150 hover:bg-accent/10 ${
                     index % 2 === 0 ? "bg-white" : "bg-muted/30"
-                  }`}
+                  } ${rowClassName?.(row) ?? ""}`}
                 >
                   {columns.map((col) => (
                     <td
@@ -120,13 +141,16 @@ export default function CustomTable<T>({
         </div>
       )}
 
-      {/* ── Mobile: cards verticales (visible solo en < md) ── */}
+      {/* ── Mobile: cards verticales (visibles por debajo de `tableBreakpoint`) ── */}
       {!loading && data.length > 0 && (
-        <div className="divide-y divide-border/40 md:hidden">
+        <div className={`divide-y divide-border/40 ${breakpoint.cards}`}>
           {data.map((row) => (
-            <div key={rowKey(row)} className="space-y-2 px-4 py-3">
+            <div
+              key={rowKey(row)}
+              className={`space-y-2 px-4 py-3 ${rowClassName?.(row) ?? ""}`}
+            >
               {columns.map((col) => {
-                if (!col.header) {
+                if (!col.header || col.mobileFullWidth) {
                   return (
                     <div key={col.key} className="pt-1">
                       {col.render(row)}

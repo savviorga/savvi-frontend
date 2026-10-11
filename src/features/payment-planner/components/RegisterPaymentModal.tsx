@@ -10,6 +10,7 @@ import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { Debt, RegisterPaymentDto } from "../types/debt.types";
 import type { Account } from "@/features/transactions/types/catalog.types";
 import type { Category } from "@/features/categories/types/category.type";
+import { categorySelectOptions } from "@/features/categories/utils/category-tree";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -47,7 +48,9 @@ export default function RegisterPaymentModal({
   const [description, setDescription] = useState("");
 
   const remaining = debt ? Number(debt.remainingAmount) : 0;
-  const expenseCategories = categories.filter((c) => (c.type ?? "egreso") === "egreso");
+  const expenseCategories = categories.filter(
+    (c) => (c.type ?? "egreso") === "egreso" && c.isActive !== false,
+  );
 
   useEffect(() => {
     if (open && debt) {
@@ -70,7 +73,7 @@ export default function RegisterPaymentModal({
       amount: num,
       paidAt: date ? date.toISOString().slice(0, 10) : undefined,
       account,
-      category,
+      categoryId: category,
       description: description.trim() || undefined,
     });
     if (success) {
@@ -141,10 +144,7 @@ export default function RegisterPaymentModal({
               value={category}
               onChange={setCategory}
               placeholder="Solo categorías de gastos"
-              options={expenseCategories.map((c) => ({
-                label: c.name,
-                value: c.name,
-              }))}
+              options={categorySelectOptions(expenseCategories, categories)}
             />
           </div>
           <div>

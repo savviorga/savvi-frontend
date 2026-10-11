@@ -8,15 +8,19 @@ import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
 import SavvySelect from "@/components/Select/Select";
 import { Button } from "@/components/ui/shadcn-button";
 import { cn } from "@/lib/utils";
-import { getCurrentMonthDateRange } from "../utils/transactionFilters";
+import {
+  getCurrentMonthDateRange,
+  type CategoryFilterOption,
+} from "../utils/transactionFilters";
 
 export interface TransactionFiltersProps {
   search: string;
   onSearchChange: (value: string) => void;
+  /** Id de la categoría elegida ("" = todas). */
   category: string;
   onCategoryChange: (value: string) => void;
-  /** Nombres de categoría disponibles para filtrar. */
-  categoryNames: string[];
+  /** Categorías disponibles para filtrar. */
+  categories: CategoryFilterOption[];
   dateFrom: Date | null;
   dateTo: Date | null;
   onDateFromChange: (date: Date | null) => void;
@@ -43,7 +47,7 @@ export default function TransactionFilters({
   onSearchChange,
   category,
   onCategoryChange,
-  categoryNames,
+  categories,
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -61,9 +65,9 @@ export default function TransactionFilters({
   const categoryOptions = useMemo(
     () => [
       { label: "Todas las categorías", value: "" },
-      ...categoryNames.map((name) => ({ label: name, value: name })),
+      ...categories.map((c) => ({ label: c.name, value: c.id })),
     ],
-    [categoryNames],
+    [categories],
   );
 
   const monthRange = getCurrentMonthDateRange(today);

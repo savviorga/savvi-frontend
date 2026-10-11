@@ -8,7 +8,7 @@ import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import type { TransferTemplate, Reminder } from "@/features/transfer-templates/types/transfer.types";
 import type { AdvisorCatalog, AdvisorData } from "./snapshot";
-import { currentMonthSpend, todayInBogota } from "./snapshot";
+import { currentMonthSpend, groupSpend, todayInBogota } from "./snapshot";
 import type { ReadToolName } from "./tools";
 
 type Args = Record<string, unknown>;
@@ -61,6 +61,7 @@ async function transactionsTool(data: AdvisorData, catalog: AdvisorCatalog, args
   const limite = Math.min(Math.max(Number(args.limite) || 15, 1), 40);
 
   const categoryName = new Map(catalog.categories.map((c) => [c.id, c.name]));
+  const parentOf = new Map(catalog.categories.map((c) => [c.id, c.parentId]));
   const accountName = new Map(catalog.accounts.map((a) => [a.id, a.name]));
 
   const list = (await data.getTransactions()).filter((t) => {
@@ -68,7 +69,8 @@ async function transactionsTool(data: AdvisorData, catalog: AdvisorCatalog, args
     if (desde && date < desde) return false;
     if (hasta && date > hasta) return false;
     if (tipo && t.type !== tipo) return false;
-    if (categoriaId && t.category !== categoriaId) return false;
+    // Un grupo incluye sus subcategorías.
+    if (categoriaId && t.categoryId !== categoriaId && parentOf.get(t.categoryId) !== categoriaId) return false;
     if (cuentaId && t.account !== cuentaId) return false;
     if (texto && !(t.description ?? "").toLocaleLowerCase("es").includes(texto)) return false;
     return true;
@@ -81,10 +83,10 @@ async function transactionsTool(data: AdvisorData, catalog: AdvisorCatalog, args
     if (t.type === "ingreso") income += t.amount;
     if (t.type === "egreso") {
       expense += t.amount;
-      const entry = byCategory.get(t.category) ?? { total: 0, count: 0 };
+      const entry = byCategory.get(t.categoryId) ?? { total: 0, count: 0 };
       entry.total += t.amount;
       entry.count += 1;
-      byCategory.set(t.category, entry);
+      byCategory.set(t.categoryId, entry);
     }
   }
 
@@ -102,7 +104,7 @@ async function transactionsTool(data: AdvisorData, catalog: AdvisorCatalog, args
       fecha: String(t.date).slice(0, 10),
       tipo: t.type,
       monto: round(t.amount),
-      categoria: categoryName.get(t.category) ?? t.category,
+      categoria: categoryName.get(t.categoryId) ?? t.category?.name ?? t.categoryId,
       cuenta: accountName.get(t.account) ?? t.account,
       descripcion: t.description ?? null,
     })),
@@ -122,9 +124,9 @@ async function budgetsTool(data: AdvisorData, catalog: AdvisorCatalog, args: Arg
   const rows = budgets
     .filter((b) => b.year === year && b.month === month && b.isActive !== false)
     .map((b) => {
-      const used = spent.get(b.categoryId) ?? 0;
+      const used = groupSpend(spent, catalog, b.categoryId);
       return {
-        categoria: b.category?.name ?? categoryName.get(b.categoryId) ?? b.categoryId,
+        categoria: categoryName.get(b.categoryId) ?? b.category?.name ?? b.categoryId,
         categoriaId: b.categoryId,
         presupuesto: round(b.amount),
         gastado: round(used),
@@ -134,8 +136,10 @@ async function budgetsTool(data: AdvisorData, catalog: AdvisorCatalog, args: Arg
     });
 
   const budgeted = new Set(rows.map((r) => r.categoriaId));
+  const parentOf = new Map(catalog.categories.map((c) => [c.id, c.parentId]));
+  // Lo gastado en una subcategoría ya cuenta en el presupuesto de su grupo.
   const withoutBudget = [...spent.entries()]
-    .filter(([id]) => !budgeted.has(id))
+    .filter(([id]) => !budgeted.has(id) && !budgeted.has(parentOf.get(id) ?? ""))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([id, total]) => ({ categoria: categoryName.get(id) ?? id, categoriaId: id, gastado: round(total) }));

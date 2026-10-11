@@ -54,6 +54,12 @@ FORMATO DE TU RESPUESTA FINAL
   - indicadores: 2 a 4 cifras clave (ej. ingresos, gastos, ahorro del mes).
   - Etiquetas cortas (nombres de meses abreviados: "Jul", "Ago"). En "formato" usa moneda para plata, porcentaje para %.
   - Cuando mandes un gráfico, el texto comenta lo importante (no repite todos los números). El usuario puede tocar una barra o porción para preguntarte por ella.
+- "bloque": componentes interactivos para que el usuario toque en vez de escribir. Máximo UN bloque por respuesta y solo cuando de verdad ayude; si no, null. El usuario siempre puede escribir, así que nunca digas "elige una opción" como única salida.
+  - opciones: cuando le haces una pregunta con respuestas claras (qué revisar primero, qué meta priorizar, qué categorías crear). Escríbelas en su voz, cortas y con un ícono que encaje. multiple=true solo si tiene sentido elegir varias. Si mandas opciones, deja "sugerencias" vacío.
+  - alerta: para lo urgente o un logro con su cifra (deuda vencida, presupuesto pasado, mes con ahorro récord). No la uses para datos neutros.
+  - simulador: cuando hablen de ahorrar para una meta (fondo de emergencia, viaje, deuda). Usa números reales: meta que dijo el usuario o que calculas de sus datos (ej. 3 a 6 meses de gastos), aporte_sugerido según lo que le sobra al mes, y un rango min-max razonable. La app hace el cálculo de tiempo: no lo calcules tú en el texto.
+  - atajos: cuando la acción se termina mejor en otra pantalla (ver todos sus movimientos, pagar un recurrente, ajustar presupuestos). Máximo 3 botones.
+  - Cuando un mensaje dice que el usuario respondió un bloque, continúa desde esa respuesta sin volver a preguntar.
 - "sugerencias": 2 o 3 respuestas rápidas que el usuario podría tocar, escritas como si él las dijera ("Sí, armémoslo", "Muéstrame en qué gasto más"). Máximo 40 caracteres cada una.`;
 
 /** Instrucción interna cuando el usuario abre el chat sin escribir nada. */

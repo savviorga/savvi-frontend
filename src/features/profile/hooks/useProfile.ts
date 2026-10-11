@@ -5,7 +5,6 @@ import toast from "react-hot-toast";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { User } from "@/features/auth/types/auth.type";
 import { isApiError, getErrorMessages, type ApiError } from "@/types/api-error.type";
-import { CategoryService } from "@/features/categories/services/category.service";
 import { ProfileService } from "../services/profile.service";
 import type { ChangePasswordDto, ProfileSummary, UpdateProfileDto } from "../types/profile.type";
 
@@ -31,25 +30,13 @@ export function useProfile() {
     try {
       setLoading(true);
       setError(null);
-      const [data, categories] = await Promise.all([
-        ProfileService.getSummary(),
-        CategoryService.getAll().catch(() => []),
-      ]);
+      const data = await ProfileService.getSummary();
       // Si el resumen no trae el estado del 2FA, se toma de `GET /profile`.
       const user =
         data.user.twoFactorEnabled === undefined
           ? await ProfileService.get().catch(() => data.user)
           : data.user;
-      // Las transacciones guardan el id de la categoría: se muestra su nombre.
-      const names = new Map(categories.map((c) => [c.id, c.name]));
-      setSummary({
-        ...data,
-        user,
-        topExpenseCategories: data.topExpenseCategories.map((c) => ({
-          ...c,
-          category: names.get(c.category) ?? c.category,
-        })),
-      });
+      setSummary({ ...data, user });
       updateUser(user);
     } catch (err) {
       console.error("Error loading profile summary:", err);

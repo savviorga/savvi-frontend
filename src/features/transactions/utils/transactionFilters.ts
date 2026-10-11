@@ -1,6 +1,6 @@
 import { endOfMonth, format, startOfDay, startOfMonth } from "date-fns";
 import type { Transaction } from "../types/transactions.types";
-import type { Category } from "../types/catalog.types";
+import { CATEGORY_PATH_SEPARATOR } from "@/features/categories/utils/category-tree";
 
 /** Primer y último día del mes actual (inclusive). */
 export function getCurrentMonthDateRange(reference = new Date()) {
@@ -38,37 +38,59 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+export interface CategoryFilterOption {
+  id: string;
+  name: string;
+}
+
 /**
- * `transaction.category` guarda el nombre, pero las transacciones antiguas guardan
- * el id: se traduce a nombre para agrupar y filtrar ambas por igual.
+ * Categorías con al menos una transacción, en orden de grupo: cada grupo
+ * (que filtra también sus subcategorías) seguido de "Grupo › Subcategoría".
  */
-function categoryNameResolver(categories: Category[]) {
-  const nameById = new Map(categories.map((c) => [c.id, c.name]));
-  return (value: string) => nameById.get(value) ?? value;
-}
-
-/** Categorías con al menos una transacción, ordenadas alfabéticamente. */
-export function getTransactionCategoryNames(
+export function getTransactionCategoryOptions(
   transactions: Transaction[],
-  categories: Category[],
-): string[] {
-  const resolve = categoryNameResolver(categories);
-  const names = new Set<string>();
+): CategoryFilterOption[] {
+  const groups = new Map<string, { name: string; children: Map<string, string> }>();
+  const groupFor = (id: string, name: string) => {
+    const existing = groups.get(id);
+    if (existing) return existing;
+    const created = { name, children: new Map<string, string>() };
+    groups.set(id, created);
+    return created;
+  };
+
   for (const t of transactions) {
-    if (t.category) names.add(resolve(t.category));
+    if (!t.categoryId) continue;
+    const parent = t.category?.parent;
+    if (parent) {
+      groupFor(parent.id, parent.name).children.set(t.categoryId, t.category!.name);
+    } else {
+      groupFor(t.categoryId, t.category?.name ?? "Sin categoría");
+    }
   }
-  return Array.from(names).sort((a, b) => a.localeCompare(b, "es"));
+
+  const byName = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], "es");
+  return [...groups]
+    .map(([id, g]) => [id, g.name, g.children] as const)
+    .sort((a, b) => a[1].localeCompare(b[1], "es"))
+    .flatMap(([id, name, children]) => [
+      { id, name },
+      ...[...children].sort(byName).map(([childId, childName]) => ({
+        id: childId,
+        name: `${name}${CATEGORY_PATH_SEPARATOR}${childName}`,
+      })),
+    ]);
 }
 
-/** Filtra por nombre de categoría. Sin categoría → sin filtro. */
+/** Filtra por categoría; si es un grupo incluye sus subcategorías. Vacío → sin filtro. */
 export function filterTransactionsByCategory(
   transactions: Transaction[],
-  categoryName: string,
-  categories: Category[],
+  categoryId: string,
 ): Transaction[] {
-  if (!categoryName) return transactions;
-  const resolve = categoryNameResolver(categories);
-  return transactions.filter((t) => resolve(t.category) === categoryName);
+  if (!categoryId) return transactions;
+  return transactions.filter(
+    (t) => t.categoryId === categoryId || t.category?.parent?.id === categoryId,
+  );
 }
 
 /** Búsqueda parcial en la descripción (tipo LIKE), sin distinguir mayúsculas ni tildes. */

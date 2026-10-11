@@ -1,5 +1,6 @@
 "use client";
 
+import { categoryPath } from "@/features/categories/utils/category-tree";
 import React, { useState } from "react";
 import { Eye } from "lucide-react";
 import FileList from "@/components/File/FileList";
@@ -117,7 +118,7 @@ export default function ViewModal({
             }).format(data.amount)}
             strong
           />
-          <Info label="Categoría" value={data.category} />
+          <Info label="Categoría" value={categoryPath(data.category, "-")} />
           <Info label="Cuenta" value={accountName} />
           <Info label="Descripción" value={data.description ?? "-"} />
           <Info

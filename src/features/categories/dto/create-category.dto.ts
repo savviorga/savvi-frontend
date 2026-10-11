@@ -6,7 +6,8 @@ export interface CreateCategoryDto {
   description?: string;
   icon?: string;
   color?: string;
-  parentId?: string;
+  /** `null` la deja como categoría principal. */
+  parentId?: string | null;
   budgetLimit?: number;
   isActive?: boolean;
   isDefault?: boolean;

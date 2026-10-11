@@ -17,6 +17,7 @@ import {
   executeSelectedItems,
   toProposal,
 } from "../utils/proposals";
+import { describeBlockForModel } from "../utils/blocks";
 import {
   clearChat,
   describeAbsence,
@@ -62,6 +63,7 @@ const toChatHistory = (messages: ChatMessage[]): ChatTurn[] =>
       content: [
         message.text,
         message.chart && `[Mostraste un gráfico: ${message.chart.title}]`,
+        message.block && describeBlockForModel(message.block, message.blockAnswer),
         message.proposal && describeProposalForModel(message.proposal),
       ]
         .filter(Boolean)
@@ -167,15 +169,16 @@ export default function SavviIAChatPage() {
       // Burbujas separadas con una pausa de "escribiendo" entre ellas.
       setActivity(null);
       for (let i = 0; i < reply.messages.length; i += 1) {
-        const { text, chart } = reply.messages[i];
+        const { text, chart, block } = reply.messages[i];
         const isLast = i === reply.messages.length - 1;
         if (i > 0) {
-          await wait(typingPause(text) + (chart ? 400 : 0));
+          await wait(typingPause(text) + (chart || block ? 400 : 0));
           if (!isCurrent()) return;
         }
         appendAssistantMessage(text, {
           animate: true,
           chart,
+          block,
           steps: i === 0 && steps.length ? steps : undefined,
           proposal: isLast && reply.proposal ? toProposal(reply.proposal) : undefined,
           suggestions: isLast && !reply.proposal ? reply.suggestions : undefined,
@@ -215,6 +218,16 @@ export default function SavviIAChatPage() {
     appendMessage({ role: "user", text });
     if (options?.reply === false) return;
     await requestReply();
+  };
+
+  /** El usuario respondió un bloque: queda marcado y su respuesta sigue la conversación. */
+  const handleBlockAnswer = async (messageId: string, answer: string) => {
+    updateMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId ? { ...message, blockAnswer: answer } : message,
+      ),
+    );
+    await handleSendMessage(answer);
   };
 
   /** Le cuenta al asesor algo que pasó en la app y deja que reaccione. */
@@ -392,6 +405,9 @@ export default function SavviIAChatPage() {
         onSelectSuggestion={(prompt) => void handleSendMessage(prompt)}
         proposalHandlers={proposalHandlers}
         onAsk={isBusy || isCreating ? undefined : (question) => void handleSendMessage(question)}
+        onBlockAnswer={
+          isBusy || isCreating ? undefined : (messageId, answer) => void handleBlockAnswer(messageId, answer)
+        }
       />
 
       <SavviIAComposer

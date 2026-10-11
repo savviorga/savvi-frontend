@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createCategoryIndex } from "@/features/categories/utils/category-tree";
 import { useCategories } from "@/features/categories/hooks/useCategories";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import { useBudgets } from "@/features/budgets/hooks/useBudgets";
@@ -49,6 +50,7 @@ export default function BudgetPage() {
       (cat) => (cat.type ?? "egreso") === "egreso" && cat.isActive
     );
 
+    const index = createCategoryIndex(categories);
     const byId: Record<string, Category> = {};
     expenseCategories.forEach((c) => {
       byId[c.id] = c;
@@ -66,11 +68,13 @@ export default function BudgetPage() {
         const cat = byId[b.categoryId];
         if (!cat) return [];
 
+        // Un presupuesto sobre un grupo cuenta también lo gastado en sus subcategorías.
+        const counted = index.groupIds(cat.id);
         const spent = transactions
           .filter(
             (tx) =>
               tx.type === "egreso" &&
-              tx.category === cat.name &&
+              counted.has(tx.categoryId) &&
               isInCurrentMonth(tx.date)
           )
           .reduce((sum, tx) => {
@@ -97,7 +101,7 @@ export default function BudgetPage() {
 
         const row: BudgetRow = {
           id: b.id,
-          name: cat.name,
+          name: index.label(cat.id),
           periodLabel,
           budgetLimit,
           spent,

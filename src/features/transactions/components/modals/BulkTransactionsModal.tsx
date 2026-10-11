@@ -224,7 +224,7 @@ export default function BulkTransactionsModal({
       date: row.date as string,
       type: row.type as CreateTransactionDto["type"],
       amount: row.amount as number,
-      category: categories.find((c) => c.id === row.categoryId)?.name ?? "",
+      categoryId: row.categoryId as string,
       account: row.accountId as string,
       ...(row.description ? { description: row.description } : {}),
     }));

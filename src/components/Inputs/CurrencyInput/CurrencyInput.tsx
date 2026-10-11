@@ -11,6 +11,9 @@ interface CurrencyFieldProps {
     disabled?: boolean;
     className?: string;
     onBlur?: FocusEventHandler<HTMLInputElement>;
+    id?: string;
+    autoFocus?: boolean;
+    "aria-invalid"?: boolean;
 }
 
 export function CurrencyField({
@@ -20,9 +23,15 @@ export function CurrencyField({
     disabled = false,
     className = "",
     onBlur,
+    id,
+    autoFocus,
+    "aria-invalid": ariaInvalid,
 }: CurrencyFieldProps) {
     return (
         <CurrencyInput
+            id={id}
+            autoFocus={autoFocus}
+            aria-invalid={ariaInvalid}
             value={value ?? ""}
             decimalsLimit={2}
             intlConfig={{

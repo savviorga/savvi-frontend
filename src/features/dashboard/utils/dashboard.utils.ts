@@ -7,6 +7,8 @@ import {
   isWithinInterval,
   startOfYear,
   endOfYear,
+  getDaysInMonth,
+  isSameMonth,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Transaction } from "@/features/transactions/types/transactions.types";
@@ -79,7 +81,7 @@ export function getSummary(transactions: Transaction[]): Summary {
   };
 }
 
-/** Gastos agrupados por categoría (solo egresos) */
+/** Gastos agrupados por categoría principal (las subcategorías suman a su grupo). Solo egresos. */
 export function getExpensesByCategory(
   transactions: Transaction[]
 ): CategoryAmount[] {
@@ -87,8 +89,9 @@ export function getExpensesByCategory(
   for (const t of transactions) {
     if (t.type !== "egreso") continue;
     const amount = toNumber(t.amount);
-    const current = byCategory.get(t.category) ?? 0;
-    byCategory.set(t.category, current + amount);
+    const groupId = t.category?.parent?.id ?? t.categoryId;
+    const current = byCategory.get(groupId) ?? 0;
+    byCategory.set(groupId, current + amount);
   }
   return Array.from(byCategory.entries())
     .map(([categoryId, total]) => ({ categoryId, total }))
@@ -136,6 +139,56 @@ export function getEvolutionData(
     }
   }
   return points;
+}
+
+/**
+ * Serie para el gráfico de flujo: por mes, los 6 meses que terminan en el
+ * elegido; por año, sus 12 meses.
+ */
+export function getFlowSeries(
+  transactions: Transaction[],
+  period: Period
+): EvolutionPoint[] {
+  const months =
+    period.type === "month"
+      ? Array.from({ length: 6 }, (_, i) => subMonths(new Date(period.year, period.month, 1), 5 - i))
+      : Array.from({ length: 12 }, (_, m) => new Date(period.year, m, 1));
+
+  return months.map((d) => {
+    const s = getSummary(filterByPeriod(transactions, { type: "month", month: d.getMonth(), year: d.getFullYear() }));
+    return {
+      label: format(d, "MMM", { locale: es }).replace(".", ""),
+      ingresos: s.ingresos,
+      gastos: s.gastos,
+      balance: s.balance,
+    };
+  });
+}
+
+/**
+ * Ritmo de gasto: promedio diario y, si es el mes en curso, a cuánto llegaría
+ * el gasto al cierre si se mantiene el ritmo.
+ */
+export function getSpendingPace(
+  gastos: number,
+  period: Period,
+  today = new Date()
+): { dailyAvg: number; projected: number | null } {
+  if (period.type === "year") {
+    const days =
+      period.year === today.getFullYear()
+        ? Math.max(1, Math.ceil((today.getTime() - startOfYear(today).getTime()) / 86_400_000))
+        : 365;
+    return { dailyAvg: gastos / days, projected: null };
+  }
+  const monthDate = new Date(period.year, period.month, 1);
+  const daysInMonth = getDaysInMonth(monthDate);
+  if (isSameMonth(monthDate, today)) {
+    const elapsed = today.getDate();
+    const dailyAvg = gastos / elapsed;
+    return { dailyAvg, projected: dailyAvg * daysInMonth };
+  }
+  return { dailyAvg: gastos / daysInMonth, projected: null };
 }
 
 /** Insight: categoría con más gasto en el periodo y monto */

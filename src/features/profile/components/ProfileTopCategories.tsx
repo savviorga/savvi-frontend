@@ -34,7 +34,7 @@ export default function ProfileTopCategories({ categories }: { categories: TopEx
         <ul className="mt-5 space-y-4">
           {categories.map((c, i) => (
             <li
-              key={c.category}
+              key={c.categoryId}
               className="savvi-profile-rise"
               style={{ animationDelay: `${400 + i * 70}ms` }}
             >

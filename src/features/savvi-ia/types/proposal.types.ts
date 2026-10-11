@@ -143,10 +143,67 @@ export interface AdvisorChart {
   format: AdvisorValueFormat;
 }
 
-/** Una burbuja del asesor: texto en markdown y, opcionalmente, un gráfico. */
+/** Ícono de una opción: el cliente lo traduce a un ícono real. */
+export type AdvisorOptionIcon =
+  | "gasto"
+  | "ingreso"
+  | "ahorro"
+  | "presupuesto"
+  | "deuda"
+  | "meta"
+  | "calendario"
+  | "tarjeta"
+  | "grafico"
+  | "pregunta";
+
+/** Pantallas a las que un atajo puede llevar (lista cerrada). */
+export type AdvisorDestination =
+  | "transacciones"
+  | "presupuestos"
+  | "pagos_recurrentes"
+  | "planificador"
+  | "categorias"
+  | "cuentas"
+  | "dashboard";
+
+export type AdvisorAlertTone = "peligro" | "advertencia" | "exito" | "info";
+
+/**
+ * Componente interactivo que el asesor adjunta a una burbuja. El modelo solo
+ * elige de este catálogo y lo llena con datos; la app lo dibuja y valida.
+ * - `options`: botones; tocar uno envía su texto como respuesta del usuario.
+ * - `alert`: aviso destacado.
+ * - `simulator`: simulador de ahorro; el cálculo lo hace la app, no el modelo.
+ * - `shortcuts`: botones que llevan a otra pantalla de Savvi.
+ */
+export type AdvisorBlock =
+  | {
+      type: "options";
+      question?: string;
+      multiple: boolean;
+      options: { text: string; description?: string; icon: AdvisorOptionIcon }[];
+    }
+  | { type: "alert"; tone: AdvisorAlertTone; title: string; detail?: string }
+  | {
+      type: "simulator";
+      title: string;
+      /** Monto a reunir, en COP */
+      goal: number;
+      /** Lo que ya tiene ahorrado para esa meta */
+      saved: number;
+      suggested: number;
+      min: number;
+      max: number;
+    }
+  | { type: "shortcuts"; buttons: { text: string; destination: AdvisorDestination }[] };
+
+export type AdvisorBlockType = AdvisorBlock["type"];
+
+/** Una burbuja del asesor: texto en markdown y, opcionalmente, un gráfico o un bloque. */
 export interface AdvisorMessage {
   text: string;
   chart?: AdvisorChart;
+  block?: AdvisorBlock;
 }
 
 /** Tokens y costo estimado de OpenAI en una respuesta (o acumulados). */

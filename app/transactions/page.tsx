@@ -25,7 +25,7 @@ import {
   filterTransactionsByDateRange,
   filterTransactionsBySearch,
   getCurrentMonthDateRange,
-  getTransactionCategoryNames,
+  getTransactionCategoryOptions,
 } from "@/features/transactions/utils/transactionFilters";
 
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, BarChart3, Layers, List } from "lucide-react";
@@ -74,16 +74,16 @@ export default function TransactionsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelId = useId();
 
-  const categoryNames = useMemo(
-    () => getTransactionCategoryNames(transactions, categories),
-    [transactions, categories],
+  const categoryOptions = useMemo(
+    () => getTransactionCategoryOptions(transactions),
+    [transactions],
   );
 
   const filteredTransactions = useMemo(() => {
     const byDate = filterTransactionsByDateRange(transactions, dateFrom, dateTo);
-    const byCategory = filterTransactionsByCategory(byDate, categoryFilter, categories);
+    const byCategory = filterTransactionsByCategory(byDate, categoryFilter);
     return filterTransactionsBySearch(byCategory, search);
-  }, [transactions, dateFrom, dateTo, categoryFilter, categories, search]);
+  }, [transactions, dateFrom, dateTo, categoryFilter, search]);
 
   const incomeList = useMemo(
     () => filteredTransactions.filter((t) => t.type === "ingreso"),
@@ -161,6 +161,7 @@ export default function TransactionsPage() {
     amount: number;
     fromAccountId: string;
     templateName: string;
+    templateDescription?: string;
     payeeName: string;
     payeeAccount?: string;
     payeeBank?: string;
@@ -181,6 +182,7 @@ export default function TransactionsPage() {
       const template = await TransferTemplatesService.create({
         fromAccountId: payload.fromAccountId,
         name: payload.templateName,
+        description: payload.templateDescription,
         payeeName: payload.payeeName,
         payeeAccount: payload.payeeAccount,
         payeeBank: payload.payeeBank,
@@ -319,7 +321,9 @@ export default function TransactionsPage() {
             panelId={filtersPanelId}
             dateFrom={dateFrom}
             dateTo={dateTo}
-            category={categoryFilter}
+            category={
+              categoryOptions.find((c) => c.id === categoryFilter)?.name ?? ""
+            }
             search={search}
           />
           <div id={filtersPanelId} hidden={!filtersOpen}>
@@ -328,7 +332,7 @@ export default function TransactionsPage() {
               onSearchChange={setSearch}
               category={categoryFilter}
               onCategoryChange={setCategoryFilter}
-              categoryNames={categoryNames}
+              categories={categoryOptions}
               dateFrom={dateFrom}
               dateTo={dateTo}
               onDateFromChange={setDateFrom}

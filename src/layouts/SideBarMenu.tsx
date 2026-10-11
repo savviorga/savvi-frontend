@@ -1,227 +1,103 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Star } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
-  ArrowRightOnRectangleIcon,
-  BanknotesIcon,
-  ChartPieIcon,
-  ChatBubbleLeftRightIcon,
-  ClipboardDocumentListIcon,
-  HomeIcon,
-  TagIcon,
-  ArrowsRightLeftIcon,
-  BuildingLibraryIcon,
-  ChartBarSquareIcon,
-} from "@heroicons/react/24/outline";
-import { useAuth } from "@/features/auth/hooks/useAuth";
+  SIDEBAR_BG,
+  SidebarBrand,
+  SidebarProfile,
+  SidebarSections,
+} from "./SidebarContent";
 
-/** Fondo sidebar (referencia diseño oscuro) */
-const SIDEBAR_BG = "#0A1622";
+/** Preferencia por navegador: el menú compacto es una comodidad, no un dato. */
+const STORAGE_KEY = "savvi_sidebar_collapsed";
+const CHANGE_EVENT = "savvi-sidebar-change";
 
-/**
- * Analítica es una app aparte. Va con prefijo NEXT_PUBLIC_ porque este menú corre en
- * el navegador (una variable sin ese prefijo llegaría como `undefined` al bundle) y
- * se inyecta en tiempo de build. Sin configurar, apunta al puerto local por defecto.
- */
-const ANALITICA_URL =
-  process.env.NEXT_PUBLIC_URL_ANALITICA?.trim() || "http://localhost:3002";
-
-type MenuItem = {
-  href: string;
-  label: string;
-  icon: typeof HomeIcon;
-  /** Enlace a otra aplicación: no se marca como activo por la ruta actual. */
-  external?: boolean;
-};
-
-const menuItems: MenuItem[] = [
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: HomeIcon,
-  },
-  {
-    href: "/categories",
-    label: "Categorías",
-    icon: TagIcon,
-  },
-  {
-    href: "/accounts",
-    label: "Cuentas",
-    icon: BuildingLibraryIcon,
-  },
-  {
-    href: "/planificador",
-    label: "Mis Deudas",
-    icon: ClipboardDocumentListIcon,
-  },
-  {
-    href: "/pagos-recurrentes",
-    label: "Pagos Recurrentes",
-    icon: BanknotesIcon,
-  },
-  {
-    href: "/budget",
-    label: "Presupuesto",
-    icon: ChartPieIcon,
-  },
-  {
-    href: "/transactions",
-    label: "Transacciones",
-    icon: ArrowsRightLeftIcon,
-  },
-  {
-    href: "/savvi-ia",
-    label: "Savvi IA",
-    icon: ChatBubbleLeftRightIcon,
-  },
-  {
-    href: ANALITICA_URL,
-    label: "Analítica",
-    icon: ChartBarSquareIcon,
-    external: true,
-  },
-];
-
-function initialsFromName(name: string | undefined): string {
-  if (!name?.trim()) return "?";
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
+function subscribe(onChange: () => void) {
+  window.addEventListener(CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function setCollapsed(value: boolean) {
+  try {
+    localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    /* modo privado: la preferencia no se recuerda */
+  }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+/** Menú lateral de escritorio. Se puede compactar a solo íconos. */
 export default function SideBarMenu() {
-  const pathname = usePathname();
-  const { logout, user } = useAuth();
-  const initials = initialsFromName(user?.name);
+  const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
+  const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <aside
       style={{ backgroundColor: SIDEBAR_BG }}
-      className="font-body hidden min-h-screen w-[248px] shrink-0 flex-col self-stretch border-r border-white/10 md:flex"
-      aria-label="Menú principal"
+      className={cn(
+        "font-body sticky top-0 hidden h-screen shrink-0 flex-col border-r border-white/10 transition-[width] duration-300 ease-out motion-reduce:transition-none md:flex",
+        collapsed ? "w-[76px]" : "w-[248px]",
+      )}
+      aria-label="Menú lateral"
     >
-      {/* Logo — alineado en altura con header (72px) */}
-      <div className="flex h-[72px] shrink-0 items-center border-b border-white/10 px-4">
-        <Link
-          href="/"
-          className="group flex min-h-0 w-full items-center gap-3 rounded-xl px-1 py-0 transition-colors hover:bg-white/5"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mint shadow-inner">
-            <Star
-              className="h-5 w-5 text-cosmos"
-              fill="currentColor"
-              strokeWidth={0}
-              aria-hidden
-            />
-          </div>
-          <span className="text-lg font-bold tracking-tight text-white">
-            Savvi
-          </span>
-        </Link>
-      </div>
-
-      {/* Perfil */}
-      <div className="shrink-0 border-b border-white/10 px-2 py-2">
-        <Link
-          href="/perfil"
-          className={`flex gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/5 ${
-            pathname === "/perfil" ? "bg-white/5 ring-1 ring-mint/20" : ""
-          }`}
-        >
-          <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-xs font-bold text-[#0A1622] shadow-md ring-2 ring-white/10"
-            aria-hidden
+      {/* Marca — alineada en altura con el header (72px) */}
+      <div
+        className={cn(
+          "flex h-[72px] shrink-0 items-center border-b border-white/10",
+          collapsed ? "justify-center px-2" : "justify-between gap-2 px-4",
+        )}
+      >
+        <SidebarBrand collapsed={collapsed} />
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
+            aria-label="Compactar menú"
+            title="Compactar menú"
           >
-            {initials}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">
-              {user?.name ?? "Usuario"}
-            </p>
-            {user?.email ? (
-              <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                {user.email}
-              </p>
-            ) : null}
-            <p
-              className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-mint"
-              role="status"
-              aria-label="Estado: en línea"
-            >
-              <span
-                className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-                aria-hidden
-              />
-              <span>En línea</span>
-            </p>
-          </div>
-        </Link>
+            <ToggleIcon className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* Navegación */}
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3 scrollbar-clean">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            !item.external &&
-            (pathname === item.href ||
-              pathname.startsWith(`${item.href}/`));
+      <div
+        className={cn(
+          "min-h-0 flex-1 py-4",
+          // En modo compacto las etiquetas flotan fuera del menú: no se recorta.
+          collapsed ? "overflow-visible px-2" : "overflow-y-auto px-3 scrollbar-clean",
+        )}
+      >
+        {collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="mx-auto mb-4 flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
+            aria-label="Expandir menú"
+            title="Expandir menú"
+          >
+            <ToggleIcon className="h-4 w-4" />
+          </button>
+        )}
+        <SidebarSections collapsed={collapsed} variant="desktop" />
+      </div>
 
-          const linkClassName = `group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors duration-200 ${
-            isActive
-              ? "bg-mint/15 text-mint shadow-sm ring-1 ring-mint/20"
-              : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
-          }`;
-
-          const content = (
-            <>
-              <Icon
-                className={`h-5 w-5 shrink-0 transition-colors ${
-                  isActive ? "text-mint" : "text-slate-500 group-hover:text-slate-300"
-                }`}
-                aria-hidden
-              />
-              {item.label}
-            </>
-          );
-
-          // Otra aplicación: navegación del navegador, no del router de Next.
-          if (item.external) {
-            return (
-              <a key={item.href} href={item.href} className={linkClassName}>
-                {content}
-              </a>
-            );
-          }
-
-          return (
-            <Link key={item.href} href={item.href} className={linkClassName}>
-              {content}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Cerrar sesión */}
-      <div className="border-t border-white/10 p-3">
-        <button
-          type="button"
-          onClick={() => logout()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-        >
-          <ArrowRightOnRectangleIcon
-            className="h-5 w-5 shrink-0 text-rose-400/90"
-            aria-hidden
-          />
-          Cerrar sesión
-        </button>
+      <div className="shrink-0 border-t border-white/10 p-3">
+        <SidebarProfile collapsed={collapsed} />
       </div>
     </aside>
   );

@@ -9,4 +9,10 @@ export interface Category {
   color?: string;
   budgetLimit?: number;
   isActive: boolean;
+  /** Grupo (categoría principal) al que pertenece; `null` si es principal. */
+  parentId?: string | null;
+  /** Transacciones registradas directamente en la categoría. Solo en `GET /categories`. */
+  transactionsCount?: number;
+  /** Presupuestos de la categoría (se eliminan con ella). Solo en `GET /categories`. */
+  budgetsCount?: number;
 }

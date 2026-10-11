@@ -160,17 +160,23 @@ export default function ReportTransactions({ transactions, categories = [] }: Re
   }, [transactions]);
 
   const categoryBreakdown = useMemo(() => {
-    const grouped = new Map<string, { amount: number; type: string }>();
+    const grouped = new Map<
+      string,
+      { name: string; amount: number; type: string }
+    >();
     for (const tx of filtered) {
-      const cat = tx.category || "Sin categoría";
-      const prev = grouped.get(cat);
-      grouped.set(cat, {
+      // Las subcategorías suman a su grupo.
+      const group = tx.category?.parent ?? tx.category;
+      const key = group?.id ?? tx.categoryId;
+      const prev = grouped.get(key);
+      grouped.set(key, {
+        name: group?.name ?? "Sin categoría",
         amount: (prev?.amount ?? 0) + Number(tx.amount || 0),
         type: prev?.type ?? tx.type,
       });
     }
-    return Array.from(grouped.entries())
-      .map(([name, { amount, type }]) => ({ name, amount, type }))
+    return Array.from(grouped.values())
+      .map(({ name, amount, type }) => ({ name, amount, type }))
       .sort((a, b) => b.amount - a.amount);
   }, [filtered]);
 

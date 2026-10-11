@@ -8,7 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { AuthService } from "../services/auth.service";
+import {
+  getTokenAge,
+  isTokenExpired,
+  watchRejectedSession,
+} from "@/lib/api-auth";
 import type {
   AuthResponse,
   LoginDto,
@@ -19,6 +25,15 @@ import type {
 } from "../types/auth.type";
 
 const STORAGE_KEY = "savvi_auth";
+
+const SESSION_EXPIRED_TOAST_ID = "session-expired";
+const SESSION_EXPIRED_MESSAGE = "Tu sesión expiró. Inicia sesión de nuevo.";
+/** Con más de un día de antigüedad el token se renueva: un usuario activo no llega a los 7 días de vencimiento. */
+const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Revisión periódica con la app abierta (cubre también el equipo que vuelve de suspensión). */
+const CHECK_INTERVAL_MS = 60 * 1000;
+/** Tras un fallo de red en la renovación, espera antes de reintentar. */
+const REFRESH_RETRY_MS = 5 * 60 * 1000;
 
 type StoredAuth = {
   user: User;
@@ -86,11 +101,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = readStored();
-    if (stored) {
+    if (stored && isTokenExpired(stored.access_token)) {
+      clearStored();
+      toast.error(SESSION_EXPIRED_MESSAGE, { id: SESSION_EXPIRED_TOAST_ID });
+    } else if (stored) {
       setUser(stored.user);
       setAccessToken(stored.access_token);
     }
     setLoading(false);
+  }, []);
+
+  // Otra pestaña renovó el token o cerró sesión: esta se pone al día.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== STORAGE_KEY) return;
+      const stored = readStored();
+      setUser(stored?.user ?? null);
+      setAccessToken(stored?.access_token ?? null);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const startSession = useCallback((data: AuthResponse) => {
@@ -102,6 +132,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(auth.user);
     setAccessToken(auth.access_token);
   }, []);
+
+  /** Sin redirigir: `ProtectedRoute` manda a /login con `callbackUrl` para volver a la misma página. */
+  const expireSession = useCallback(() => {
+    clearStored();
+    setUser(null);
+    setAccessToken(null);
+    toast.error(SESSION_EXPIRED_MESSAGE, { id: SESSION_EXPIRED_TOAST_ID });
+  }, []);
+
+  useEffect(() => watchRejectedSession(expireSession), [expireSession]);
+
+  // Cierra la sesión al vencer el token y la renueva mientras el usuario usa la app.
+  useEffect(() => {
+    if (!access_token) return;
+    let refreshing = false;
+    let lastAttempt = 0;
+
+    const check = async () => {
+      if (isTokenExpired(access_token)) {
+        expireSession();
+        return;
+      }
+      const age = getTokenAge(access_token);
+      if (
+        age === null ||
+        age < REFRESH_AFTER_MS ||
+        refreshing ||
+        document.visibilityState !== "visible" ||
+        Date.now() - lastAttempt < REFRESH_RETRY_MS
+      ) {
+        return;
+      }
+      refreshing = true;
+      lastAttempt = Date.now();
+      try {
+        startSession(await AuthService.refresh(access_token));
+      } catch {
+        // Un 401 lo resuelve watchRejectedSession; un fallo de red se reintenta luego.
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    void check();
+    const interval = window.setInterval(check, CHECK_INTERVAL_MS);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [access_token, expireSession, startSession]);
 
   const login = useCallback(
     async (

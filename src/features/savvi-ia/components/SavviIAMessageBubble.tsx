@@ -6,7 +6,8 @@ import SavviIAAvatar from "./SavviIAAvatar";
 import SavviIAProposalCard from "./SavviIAProposalCard";
 import SavviIAChart from "./SavviIAChart";
 import SavviIAMarkdown from "./SavviIAMarkdown";
-import type { AdvisorChart, AdvisorStep, Proposal } from "../types/proposal.types";
+import SavviIABlock from "./blocks/SavviIABlock";
+import type { AdvisorBlock, AdvisorChart, AdvisorStep, Proposal } from "../types/proposal.types";
 
 export interface ChatMessage {
   id: string;
@@ -23,6 +24,10 @@ export interface ChatMessage {
   proposal?: Proposal;
   /** Gráfico que acompaña el mensaje del asesor. */
   chart?: AdvisorChart;
+  /** Componente interactivo (opciones, simulador…) que acompaña el mensaje. */
+  block?: AdvisorBlock;
+  /** Respuesta del usuario a `block`; ya respondido, queda bloqueado. */
+  blockAnswer?: string;
   /** Lo que el asesor revisó antes de responder. */
   steps?: AdvisorStep[];
   /** Respuestas rápidas que propone el asesor tras este mensaje. */
@@ -45,6 +50,8 @@ interface SavviIAMessageBubbleProps {
   proposalHandlers?: ProposalHandlers;
   /** Pregunta al asesor desde un gráfico (tocar una barra, porción o tarjeta). */
   onAsk?: (question: string) => void;
+  /** Respuesta a un bloque interactivo; sin ella los bloques no se pueden usar. */
+  onBlockAnswer?: (messageId: string, answer: string) => void;
 }
 
 const STATUS_META = {
@@ -94,6 +101,7 @@ export default function SavviIAMessageBubble({
   onGrow,
   proposalHandlers,
   onAsk,
+  onBlockAnswer,
 }: SavviIAMessageBubbleProps) {
   const isAssistant = message.role === "assistant";
   const { visible, done } = useTypewriter(message.text, Boolean(message.animate), onGrow);
@@ -112,7 +120,7 @@ export default function SavviIAMessageBubble({
       {isAssistant && <SavviIAAvatar />}
 
       <div
-        className={`flex max-w-[85%] flex-col md:max-w-[75%] ${isAssistant ? "items-start" : "items-end"} ${message.proposal || message.chart ? "w-full" : ""}`}
+        className={`flex max-w-[85%] flex-col md:max-w-[75%] ${isAssistant ? "items-start" : "items-end"} ${message.proposal || message.chart || message.block ? "w-full" : ""}`}
       >
         {message.steps && message.steps.length > 0 && (
           <p className="mb-1 flex max-w-full items-center gap-1.5 px-1 text-[11px] text-slate-400">
@@ -162,6 +170,15 @@ export default function SavviIAMessageBubble({
         )}
 
         {message.chart && done && <SavviIAChart chart={message.chart} onAsk={onAsk} />}
+
+        {message.block && done && (
+          <SavviIABlock
+            block={message.block}
+            answer={message.blockAnswer}
+            disabled={!onBlockAnswer}
+            onAnswer={onBlockAnswer && ((answer) => onBlockAnswer(message.id, answer))}
+          />
+        )}
 
         {message.proposal && proposalHandlers && done && (
           <SavviIAProposalCard

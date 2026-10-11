@@ -1,5 +1,6 @@
 "use client";
 
+import { categoryPath } from "@/features/categories/utils/category-tree";
 import { useMemo, useState } from "react";
 import { ChevronRight, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { format, isToday, isYesterday } from "date-fns";
@@ -247,12 +248,12 @@ export default function TransactionTable({
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
                               <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-                                {item.description?.trim() || item.category || "Sin descripción"}
+                                {item.description?.trim() || categoryPath(item.category, "Sin descripción")}
                               </span>
                               <AttachmentBadge count={item.documentsCount} />
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                              {item.category}
+                              {categoryPath(item.category)}
                             </span>
                           </span>
 

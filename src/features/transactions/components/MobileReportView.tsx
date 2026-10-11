@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 import { Calendar } from "lucide-react";
 import type { Transaction } from "../types/transactions.types";
 import type { Category } from "../types/catalog.types";
+import { categoryPath } from "@/features/categories/utils/category-tree";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -103,7 +104,7 @@ export default function MobileReportView({
 
   const catMap = useMemo(() => {
     const m = new Map<string, Category>();
-    for (const c of categories) m.set(c.name, c);
+    for (const c of categories) m.set(c.id, c);
     return m;
   }, [categories]);
 
@@ -159,20 +160,23 @@ export default function MobileReportView({
   const categoryBreakdown = useMemo(() => {
     const grouped = new Map<
       string,
-      { total: number; type: string }
+      { name: string; total: number; type: string }
     >();
     for (const tx of filtered) {
       if (tx.type !== "egreso") continue;
-      const cat = tx.category || "Sin categoría";
-      const prev = grouped.get(cat);
-      grouped.set(cat, {
+      // Las subcategorías suman a su grupo.
+      const group = tx.category?.parent ?? tx.category;
+      const key = group?.id ?? tx.categoryId;
+      const prev = grouped.get(key);
+      grouped.set(key, {
+        name: group?.name ?? "Sin categoría",
         total: (prev?.total ?? 0) + Number(tx.amount || 0),
         type: tx.type,
       });
     }
     return Array.from(grouped.entries())
-      .map(([name, { total }]) => {
-        const meta = catMap.get(name);
+      .map(([categoryId, { name, total }]) => {
+        const meta = catMap.get(categoryId);
         return {
           name,
           total,
@@ -370,7 +374,7 @@ export default function MobileReportView({
           </h3>
           <div className="divide-y divide-border/50">
             {sortedTransactions.map((tx) => {
-              const catMeta = catMap.get(tx.category);
+              const catMeta = catMap.get(tx.categoryId);
               const dotColor = catMeta?.color ?? "#94a3b8";
               const amountColor =
                 tx.type === "egreso"
@@ -390,10 +394,10 @@ export default function MobileReportView({
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">
-                      {tx.description || tx.category}
+                      {tx.description || categoryPath(tx.category)}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {tx.category}
+                      {categoryPath(tx.category)}
                     </p>
                   </div>
                   <span

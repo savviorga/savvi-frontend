@@ -55,7 +55,7 @@ export interface RegisterPaymentDto {
   amount: number;
   paidAt?: string;
   account: string;
-  category: string;
+  categoryId: string;
   description?: string;
 }
 

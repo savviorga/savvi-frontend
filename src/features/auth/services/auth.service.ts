@@ -62,6 +62,15 @@ export const AuthService = {
     return handleResponse<AuthResponse>(res);
   },
 
+  /** Cambia un JWT aún vigente por uno nuevo; responde 401 si ya venció. */
+  refresh: async (accessToken: string): Promise<AuthResponse> => {
+    const res = await fetch(`${API_BASE}/refresh`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse<AuthResponse>(res);
+  },
+
   forgotPassword: async (payload: ForgotPasswordDto): Promise<MessageResponse> => {
     const res = await fetch(`${API_BASE}/forgot-password`, {
       method: "POST",

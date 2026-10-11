@@ -8,12 +8,25 @@ export interface TransactionDocument {
   url: string;
 }
 
+/** Categoría que el backend devuelve junto con la transacción (relación `category_id`). */
+export interface TransactionCategory {
+  id: string;
+  name: string;
+  type?: "ingreso" | "egreso";
+  icon?: string | null;
+  color?: string | null;
+  parentId?: string | null;
+  /** Grupo de la categoría, si es una subcategoría. */
+  parent?: { id: string; name: string; color?: string | null } | null;
+}
+
 export interface Transaction {
   id: string;
   date: string; // ISO date: YYYY-MM-DD
   type: TransactionType;
   amount: number; // se normaliza a number
-  category: string;
+  categoryId: string;
+  category: TransactionCategory | null;
   account: string; // accountId
   description?: string;
   /** Solo viene en el PATCH de edición; el listado no lo incluye. */
@@ -26,7 +39,7 @@ export interface CreateTransactionDto {
   date: string;
   type: TransactionType;
   amount: number;
-  category: string;
+  categoryId: string;
   account: string;
   description?: string;
   files?: File[];

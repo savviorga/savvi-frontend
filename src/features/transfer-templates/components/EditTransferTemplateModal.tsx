@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import Modal from "@/components/Modal/Modal";
+import ChipSelect from "@/components/Inputs/ChipSelect";
+import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/shadcn-button";
 import type {
   TransferFrequency,
@@ -14,6 +17,11 @@ import {
   intervalToDays,
   type IntervalUnit,
 } from "../utils/interval";
+import { cleanTemplateName, parseIsoDate } from "../utils/schedule";
+import DueStatus from "./DueStatus";
+
+/** Igual que `MaxLength` del DTO en el backend. */
+const DESCRIPTION_MAX = 1000;
 
 type AccountOption = { id: string; name: string };
 
@@ -33,6 +41,7 @@ export default function EditTransferTemplateModal({
   onSave: (id: string, payload: UpdateTransferTemplateDto) => Promise<void>;
 }) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [fromAccountId, setFromAccountId] = useState("");
   const [payeeName, setPayeeName] = useState("");
   const [payeeAccount, setPayeeAccount] = useState("");
@@ -45,10 +54,14 @@ export default function EditTransferTemplateModal({
   const [customIntervalUnit, setCustomIntervalUnit] =
     useState<IntervalUnit>("years");
   const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [nextDueDate, setNextDueDate] = useState("");
+  /** Solo se envía la fecha si el usuario la cambió; si no, el backend la recalcula. */
+  const [dueDateTouched, setDueDateTouched] = useState(false);
 
   useEffect(() => {
     if (!open || !template) return;
     setName(template.name);
+    setDescription(template.description ?? "");
     setFromAccountId(template.fromAccountId);
     setPayeeName(template.payeeName);
     setPayeeAccount(template.payeeAccount ?? "");
@@ -56,6 +69,8 @@ export default function EditTransferTemplateModal({
     setRecurrenceType(template.recurrenceType);
     setFrequency(template.frequency);
     setDayOfMonth(template.dayOfMonth);
+    setNextDueDate(template.nextDueDate.slice(0, 10));
+    setDueDateTouched(false);
     if (
       template.frequency === "custom" &&
       template.customIntervalDays != null &&
@@ -93,6 +108,7 @@ export default function EditTransferTemplateModal({
 
     const payload: UpdateTransferTemplateDto = {
       name: name.trim(),
+      description: description.trim(),
       fromAccountId,
       payeeName: payeeName.trim(),
       payeeAccount: payeeAccount.trim() || undefined,
@@ -104,6 +120,7 @@ export default function EditTransferTemplateModal({
         frequency === "custom"
           ? intervalToDays(customIntervalAmount, customIntervalUnit)
           : undefined,
+      ...(dueDateTouched && nextDueDate ? { nextDueDate } : {}),
     };
 
     if (frequency !== "custom") {
@@ -122,7 +139,7 @@ export default function EditTransferTemplateModal({
       title="Editar transferencia recurrente"
       description={
         template
-          ? `Plantilla: ${template.name}`
+          ? `Plantilla: ${cleanTemplateName(template.name)}`
           : undefined
       }
       className="max-w-xl"
@@ -165,8 +182,27 @@ export default function EditTransferTemplateModal({
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
               maxLength={200}
+              placeholder="Ej. Arriendo apartamento"
               required
             />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">
+              Descripción{" "}
+              <span className="font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              maxLength={DESCRIPTION_MAX}
+              placeholder="Ej. Crédito hipotecario 30563. Se paga en https://credifamilia.com"
+              className="block w-full resize-y rounded-xl border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30"
+            />
+            <p className="mt-1 text-right text-xs text-muted-foreground tabular-nums">
+              {description.length}/{DESCRIPTION_MAX}
+            </p>
           </div>
 
           <div>
@@ -210,30 +246,18 @@ export default function EditTransferTemplateModal({
 
           <div>
             <p className="mb-2 text-sm font-medium text-foreground">Frecuencia</p>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { label: "Semanal", value: "weekly" },
-                  { label: "Quincenal", value: "biweekly" },
-                  { label: "Mensual", value: "monthly" },
-                  { label: "Bimestral", value: "bimonthly" },
-                  { label: "Personalizado", value: "custom" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setFrequency(opt.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    frequency === opt.value
-                      ? "border-accent bg-accent text-white"
-                      : "border-border bg-white text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <ChipSelect
+              ariaLabel="Frecuencia"
+              options={[
+                { label: "Semanal", value: "weekly" },
+                { label: "Quincenal", value: "biweekly" },
+                { label: "Mensual", value: "monthly" },
+                { label: "Bimestral", value: "bimonthly" },
+                { label: "Personalizado", value: "custom" },
+              ] as const}
+              value={frequency}
+              onChange={setFrequency}
+            />
             {frequency === "custom" && (
               <div className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-accent/20 bg-accent/10 p-3">
                 <div className="min-w-[5rem] flex-1">
@@ -281,27 +305,51 @@ export default function EditTransferTemplateModal({
 
           <div>
             <p className="mb-2 text-sm font-medium text-foreground">Tipo</p>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { label: "Recordatorio", value: "reminder" },
-                  { label: "Automático", value: "automatic" },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setRecurrenceType(opt.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    recurrenceType === opt.value
-                      ? "border-accent bg-accent text-white"
-                      : "border-border bg-white text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <ChipSelect
+              ariaLabel="Tipo"
+              options={[
+                { label: "Recordatorio", value: "reminder" },
+                { label: "Automático", value: "automatic" },
+              ] as const}
+              value={recurrenceType}
+              onChange={setRecurrenceType}
+            />
+          </div>
+
+          <div>
+            <SavvyDatePicker
+              label="Próximo vencimiento"
+              value={nextDueDate ? parseIsoDate(nextDueDate) : null}
+              onChange={(date) => {
+                if (!date) return;
+                setNextDueDate(format(date, "yyyy-MM-dd"));
+                setDueDateTouched(true);
+                // En pagos mensuales, los siguientes vencen el mismo día del mes.
+                if (frequency === "monthly" || frequency === "bimonthly") {
+                  setDayOfMonth(Math.min(28, date.getDate()));
+                }
+              }}
+              dateFormat="EEEE d 'de' MMMM yyyy"
+              triggerClassName="capitalize"
+            />
+            {nextDueDate && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <DueStatus nextDueDate={nextDueDate} className="text-xs [&>svg]:h-3.5 [&>svg]:w-3.5" />
+                {dueDateTouched && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNextDueDate(template.nextDueDate.slice(0, 10));
+                      setDayOfMonth(template.dayOfMonth);
+                      setDueDateTouched(false);
+                    }}
+                    className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    Deshacer
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {frequency !== "custom" && (
@@ -321,9 +369,18 @@ export default function EditTransferTemplateModal({
           )}
 
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            Si cambias la frecuencia o el calendario, la{" "}
-            <strong>próxima fecha</strong> se recalcula desde hoy según la nueva
-            regla.
+            {dueDateTouched ? (
+              <>
+                El próximo pago vencerá en la <strong>fecha que elegiste</strong>.
+                Después de pagarlo, el siguiente se calcula con la frecuencia.
+              </>
+            ) : (
+              <>
+                Si cambias la frecuencia o el día sin elegir una fecha, la{" "}
+                <strong>próxima fecha</strong> se recalcula desde hoy según la nueva
+                regla.
+              </>
+            )}
           </p>
 
           <div className="flex justify-end gap-2 border-t pt-4">

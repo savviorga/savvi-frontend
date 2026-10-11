@@ -198,7 +198,7 @@ const toTransactionDto = (t: TransactionDraft): CreateTransactionDto => ({
   date: t.date,
   type: t.type,
   amount: t.amount,
-  category: t.categoryId,
+  categoryId: t.categoryId,
   account: t.accountId,
   description: t.description,
 });
@@ -247,7 +247,7 @@ async function executeItem(proposal: ProposalData, index: number): Promise<void>
       await PaymentPlannerService.registerPayment(p.debtId, {
         amount: p.amount,
         account: p.accountId,
-        category: p.categoryId,
+        categoryId: p.categoryId,
         paidAt: p.paidAt,
         description: p.description,
       });

@@ -1,6 +1,17 @@
 import { getBearerAuthHeaders, getJsonAuthHeaders } from "@/lib/api-auth";
 import { parseHttpErrorResponse } from "@/lib/parse-http-error-response";
 import type { Account, Category } from "../types/catalog.types";
+import { createCategoryIndex } from "@/features/categories/utils/category-tree";
+
+/** Catálogo para la IA: la ruta "Mercado › Plaza" le da el contexto del grupo. */
+function toAiCategories(categories: Category[]) {
+  const index = createCategoryIndex(categories);
+  return categories.map((c) => ({
+    id: c.id,
+    name: index.label(c.id),
+    type: c.type ?? "egreso",
+  }));
+}
 
 /** Campos deducidos de lo que dijo el usuario; `null` = no se detectó. */
 export interface DetectedTransaction {
@@ -47,11 +58,7 @@ export const AiTransactionService = {
       headers: getJsonAuthHeaders(),
       body: JSON.stringify({
         text,
-        categories: categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          type: c.type ?? "egreso",
-        })),
+        categories: toAiCategories(categories),
         accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
       }),
     });
@@ -81,11 +88,7 @@ export const AiTransactionService = {
         text,
         current: options?.current ?? [],
         history: options?.history ?? [],
-        categories: categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          type: c.type ?? "egreso",
-        })),
+        categories: toAiCategories(categories),
         accounts: accounts.map((a) => ({ id: a.id, name: a.name })),
       }),
     });

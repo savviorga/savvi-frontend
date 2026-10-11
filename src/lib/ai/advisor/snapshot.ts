@@ -11,9 +11,17 @@ import type { Category } from "@/features/categories/types/category.type";
 import type { Debt } from "@/features/payment-planner/types/debt.types";
 import type { Transaction } from "@/features/transactions/types/transactions.types";
 import type { ProfileSummary } from "@/features/profile/types/profile.type";
+import { createCategoryIndex } from "@/features/categories/utils/category-tree";
 
 export interface AdvisorCatalog {
-  categories: { id: string; name: string; type: "ingreso" | "egreso" }[];
+  /** `name` es la ruta "Grupo › Subcategoría"; `parentId` es el grupo. */
+  categories: {
+    id: string;
+    name: string;
+    type: "ingreso" | "egreso";
+    parentId: string | null;
+    isGroup: boolean;
+  }[];
   accounts: { id: string; name: string; isCredit: boolean; isActive: boolean }[];
   debts: { id: string; name: string; remaining: number }[];
 }
@@ -84,9 +92,20 @@ export function currentMonthSpend(
   const spent = new Map<string, number>();
   for (const t of transactions) {
     if (t.type !== "egreso" || !String(t.date).startsWith(prefix)) continue;
-    spent.set(t.category, (spent.get(t.category) ?? 0) + t.amount);
+    spent.set(t.categoryId, (spent.get(t.categoryId) ?? 0) + t.amount);
   }
   return spent;
+}
+
+/** Lo gastado en la categoría más sus subcategorías (un grupo incluye a sus hijas). */
+export function groupSpend(
+  spent: Map<string, number>,
+  catalog: AdvisorCatalog,
+  categoryId: string,
+): number {
+  return catalog.categories
+    .filter((c) => c.id === categoryId || c.parentId === categoryId)
+    .reduce((sum, c) => sum + (spent.get(c.id) ?? 0), 0);
 }
 
 export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> {
@@ -99,11 +118,14 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
     data.getTransactions().catch(() => [] as Transaction[]),
   ]);
 
+  const categoryIndex = createCategoryIndex(categories);
   const catalog: AdvisorCatalog = {
     categories: categories.map((c) => ({
       id: c.id,
-      name: c.name,
+      name: categoryIndex.label(c.id),
       type: c.type === "ingreso" ? "ingreso" : "egreso",
+      parentId: c.parentId ?? null,
+      isGroup: categories.some((child) => child.parentId === c.id),
     })),
     accounts: accounts.map((a) => ({
       id: a.id,
@@ -143,17 +165,17 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
       : ["- (ninguna)"]),
     `Saldo total en cuentas de débito: ${money(summary.accounts.totalBalance)}.`,
     "",
-    "CATEGORÍAS (id | nombre | tipo):",
+    "CATEGORÍAS (id | nombre | tipo). \"Grupo › Subcategoría\" es una subcategoría; consultar o presupuestar un grupo incluye sus subcategorías. Al registrar, usa la subcategoría si el usuario la menciona:",
     ...(catalog.categories.length
-      ? catalog.categories.map((c) => `- ${c.id} | ${c.name} | ${c.type}`)
+      ? catalog.categories.map((c) => `- ${c.id} | ${c.name}${c.isGroup ? " (grupo)" : ""} | ${c.type}`)
       : ["- (ninguna)"]),
     "",
     `PRESUPUESTOS DE ESTE MES (${monthBudgets.length}):`,
     ...(monthBudgets.length
       ? monthBudgets.map((b) => {
-          const used = spent.get(b.categoryId) ?? 0;
+          const used = groupSpend(spent, catalog, b.categoryId);
           const pct = b.amount > 0 ? Math.round((used / b.amount) * 100) : 0;
-          const name = b.category?.name ?? categoryName.get(b.categoryId) ?? b.categoryId;
+          const name = categoryName.get(b.categoryId) ?? b.category?.name ?? b.categoryId;
           return `- ${name}: presupuesto ${money(b.amount)}, gastado ${money(used)} (${pct}%)`;
         })
       : ["- (ninguno)"]),

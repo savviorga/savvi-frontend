@@ -15,6 +15,8 @@ export interface TransferTemplate {
   fromAccountId: string;
 
   name: string;
+  /** Texto libre: referencia, número de crédito, link del portal de pago… */
+  description?: string | null;
   payeeName: string;
   payeeAccount?: string | null;
   payeeBank?: string | null;
@@ -49,6 +51,8 @@ export interface Reminder {
 export type UpdateTransferTemplateDto = Partial<{
   fromAccountId: string;
   name: string;
+  /** Vacío borra la descripción. */
+  description: string;
   payeeName: string;
   payeeAccount: string;
   payeeBank: string;
@@ -56,11 +60,14 @@ export type UpdateTransferTemplateDto = Partial<{
   frequency: TransferFrequency;
   customIntervalDays: number;
   dayOfMonth: number;
+  /** YYYY-MM-DD; si se envía, gana sobre la fecha que el backend recalcula. */
+  nextDueDate: string;
 }>;
 
 export interface CreateTransferTemplateDto {
   fromAccountId: string;
   name: string;
+  description?: string;
   payeeName: string;
   payeeAccount?: string;
   payeeBank?: string;

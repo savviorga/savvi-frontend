@@ -7,6 +7,7 @@ import Modal from "@/components/Modal/Modal";
 import SavvySelect from "@/components/Select/Select";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { Category } from "@/features/categories/types/category.type";
+import { categorySelectOptions } from "@/features/categories/utils/category-tree";
 
 interface BudgetModalForm {
   categoryId: string;
@@ -119,10 +120,7 @@ export function BudgetModal({
               value={form.categoryId}
               onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
               placeholder="Selecciona una categoría de gasto"
-              options={expenseCategories.map((c) => ({
-                label: c.name,
-                value: c.id,
-              }))}
+              options={categorySelectOptions(expenseCategories, categories)}
             />
           </div>
 

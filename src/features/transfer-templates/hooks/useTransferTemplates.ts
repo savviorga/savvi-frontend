@@ -102,15 +102,16 @@ export function useTransferTemplates(options?: UseTransferTemplatesOptions) {
   async function execute(
     templateId: string,
     payload: Omit<ExecuteTransferDto, "templateId"> & { description?: string }
-  ): Promise<boolean> {
+  ): Promise<{ transactionId: string | null } | null> {
     try {
       setLoading(true);
-      await TransferTemplatesService.execute(templateId, {
+      const result = await TransferTemplatesService.execute(templateId, {
         templateId,
         ...payload,
       });
       await load();
-      return true;
+      const transaction = result.transaction as { id?: string } | null;
+      return { transactionId: transaction?.id ?? null };
     } catch (error) {
       if (isApiError(error)) {
         getErrorMessages(error).forEach((msg) => toast.error(msg));
@@ -118,7 +119,7 @@ export function useTransferTemplates(options?: UseTransferTemplatesOptions) {
         toast.error("Error al ejecutar la transferencia");
       }
       setLoading(false);
-      return false;
+      return null;
     }
   }
 

@@ -10,6 +10,7 @@ import {
   type DetectedTransaction,
 } from "../services/ai-transaction.service";
 import type { Account, Category } from "../types/catalog.types";
+import { createCategoryIndex } from "@/features/categories/utils/category-tree";
 
 interface SmartTransactionCaptureProps {
   categories: Category[];
@@ -59,7 +60,9 @@ function buildSummary(
   );
   push(
     "categoryId",
-    categories.find((c) => c.id === detected.categoryId)?.name ?? null,
+    detected.categoryId && categories.some((c) => c.id === detected.categoryId)
+      ? createCategoryIndex(categories).label(detected.categoryId)
+      : null,
   );
   push("description", detected.description);
 

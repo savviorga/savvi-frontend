@@ -1,24 +1,26 @@
 "use client";
 
-import { useMemo } from "react";
-import { format, parse } from "date-fns";
+import { useMemo, useState } from "react";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Eye } from "lucide-react";
+import { Banknote, CalendarDays, History, Info, Pencil } from "lucide-react";
 import Modal from "@/components/Modal/Modal";
-import { ProgressBar } from "@/components/ProgressBar";
-import StatusBadge from "@/components/FeedBack/StatusBadge";
-import { Button } from "@/components/ui/shadcn-button";
+import SavviTabs from "@/components/Tabs/SavviTabs";
+import { Button } from "@/components/ui/Button";
 import type { Transaction } from "@/features/transactions/types/transactions.types";
 import type { TransferTemplate } from "../types/transfer.types";
 import {
-  dueProgressVariant,
+  cleanTemplateName,
+  formatIsoDate,
   frequencyLabel,
-  getDueProgressInfo,
 } from "../utils/schedule";
+import DueStatus from "./DueStatus";
+import { getServiceKind } from "./ServiceAvatar";
 
 type AccountOption = { id: string; name: string };
+type DetailTab = "details" | "history";
 
-/** Cantidad de pagos que se listan en el historial del detalle. */
+/** Pagos visibles en el historial antes de "Ver todos". */
 const HISTORY_LIMIT = 5;
 
 function formatMoney(value: number) {
@@ -30,37 +32,73 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function formatIsoDate(iso: string, pattern: string) {
-  return format(parse(iso.slice(0, 10), "yyyy-MM-dd", new Date()), pattern, {
-    locale: es,
-  });
-}
+const formatTimestamp = (iso: string) =>
+  format(new Date(iso), "d MMM yyyy", { locale: es });
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-border/70 p-4">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h3>
-      {children}
-    </section>
+const normalize = (value: string) => value.trim().toLowerCase();
+
+type Row = { label: string; value?: string | null };
+
+/**
+ * Quita filas vacías y valores que ya se mostraron (en el título o en un grupo
+ * anterior), para que ningún dato aparezca dos veces en el modal.
+ */
+function dedupeGroups(alreadyShown: string[], groups: Row[][]): Row[][] {
+  const seen = new Set(alreadyShown.map(normalize));
+  return groups.map((rows) =>
+    rows.filter((row) => {
+      if (!row.value?.trim()) return false;
+      const key = normalize(row.value);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | null }) {
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+
+/** Texto con saltos de línea y links clicables (p. ej. el portal de pago). */
+function LinkifiedText({ text }: { text: string }) {
   return (
-    <div className="min-w-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="break-words text-sm font-medium text-foreground">
-        {value || "—"}
-      </p>
-    </div>
+    <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-700">
+      {text.split(URL_PATTERN).map((part, i) =>
+        i % 2 === 1 ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all font-medium text-mint-dim underline decoration-mint/40 underline-offset-2 hover:decoration-mint-dim"
+          >
+            {part}
+          </a>
+        ) : (
+          part
+        )
+      )}
+    </p>
+  );
+}
+
+function DetailGroup({ title, rows }: { title: string; rows: Row[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+        {title}
+      </h3>
+      <dl className="divide-y divide-gray-200/70 rounded-xl bg-gray-50 px-4">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-4 py-3">
+            <dt className="text-sm text-gray-500">{row.label}</dt>
+            <dd className="min-w-0 break-words text-right text-sm font-medium text-[#0B1829]">
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -82,6 +120,9 @@ export default function TransferTemplateDetailModal({
   onEdit?: (template: TransferTemplate) => void;
   onExecute?: (template: TransferTemplate) => void;
 }) {
+  const [tab, setTab] = useState<DetailTab>("details");
+  const [showAllHistory, setShowAllHistory] = useState(false);
+
   const sortedPayments = useMemo(
     () => [...payments].sort((a, b) => b.date.localeCompare(a.date)),
     [payments]
@@ -89,186 +130,201 @@ export default function TransferTemplateDetailModal({
 
   if (!template) return null;
 
-  const { progressPercent, label, daysUntil } = getDueProgressInfo(
-    template.nextDueDate,
-    template.frequency,
-    template.customIntervalDays
-  );
+  // El modal sigue montado entre plantillas: vuelve a la vista inicial al salir.
+  const leave = (action: () => void) => {
+    setTab("details");
+    setShowAllHistory(false);
+    action();
+  };
 
+  const { icon: ServiceIcon } = getServiceKind(template);
   const fromAccountName =
     accounts.find((a) => a.id === template.fromAccountId)?.name ?? null;
+
+  const [payeeRows, scheduleRows] = dedupeGroups(
+    [template.name, cleanTemplateName(template.name)],
+    [
+      [
+        { label: "Nombre", value: template.payeeName },
+        { label: "Banco", value: template.payeeBank },
+        { label: "Número de cuenta", value: template.payeeAccount },
+      ],
+      [
+        { label: "Cuenta origen", value: fromAccountName },
+        {
+          label: "Día de pago",
+          value:
+            template.frequency === "custom" ? null : `Día ${template.dayOfMonth}`,
+        },
+      ],
+    ]
+  );
 
   const totalPaid = sortedPayments.reduce(
     (acc, tx) => acc + Number(tx.amount || 0),
     0
   );
   const lastPayment = sortedPayments[0] ?? null;
+  const visiblePayments = showAllHistory
+    ? sortedPayments
+    : sortedPayments.slice(0, HISTORY_LIMIT);
+
+  const tabs = [
+    { id: "details" as const, label: "Detalles", icon: Info },
+    { id: "history" as const, label: "Historial", icon: History, count: sortedPayments.length },
+  ];
 
   return (
     <Modal
       open={open}
       onOpenChange={(v) => {
-        if (!v) onClose();
+        if (!v) leave(onClose);
       }}
-      title={template.name}
-      description={`Pago recurrente a ${template.payeeName}`}
-      className="md:max-w-2xl"
-      headerIcon={<Eye className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />}
+      title={cleanTemplateName(template.name)}
+      className="md:max-w-xl"
+      headerIcon={<ServiceIcon className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />}
     >
-      <div className="space-y-4">
-        {/* Resumen */}
-        <div className="rounded-xl border border-border/70 bg-muted/40 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Monto anterior</p>
-              <p className="text-2xl font-bold tabular-nums text-foreground">
-                {template.lastAmount == null
-                  ? "—"
-                  : formatMoney(Number(template.lastAmount))}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge active={template.isActive} />
-              <span className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold ring-1 ring-emerald-600/20">
-                {frequencyLabel(template)}
+      <div className="space-y-6">
+        {/* Hero: cuánto, cuándo y qué hacer */}
+        <section className="flex flex-col items-center text-center">
+          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
+            Monto a pagar
+          </p>
+          <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-[#0B1829]">
+            {template.lastAmount == null
+              ? "—"
+              : formatMoney(Number(template.lastAmount))}
+          </p>
+
+          <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-gray-600">
+            <CalendarDays className="h-4 w-4 text-gray-400" aria-hidden />
+            Vence el{" "}
+            <span className="font-semibold text-[#0B1829]">
+              {formatIsoDate(template.nextDueDate, "d 'de' MMMM yyyy")}
+            </span>
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {template.isActive ? (
+              <DueStatus nextDueDate={template.nextDueDate} variant="badge" />
+            ) : (
+              <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">
+                En pausa
               </span>
-              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-border">
-                {template.recurrenceType === "automatic"
-                  ? "Automático"
-                  : "Recordatorio"}
-              </span>
-            </div>
+            )}
+            <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+              {frequencyLabel(template)} ·{" "}
+              {template.recurrenceType === "automatic" ? "Automático" : "Recordatorio"}
+            </span>
           </div>
 
-          <div className="mt-4 border-t border-border/70 pt-4">
-            <p className="mb-2 text-sm text-muted-foreground">
-              Próximo vencimiento:{" "}
-              <span className="font-semibold capitalize text-foreground">
-                {formatIsoDate(template.nextDueDate, "EEEE d 'de' MMMM yyyy")}
-              </span>
-            </p>
-            <ProgressBar
-              label={label}
-              value={progressPercent}
-              variant={dueProgressVariant(daysUntil)}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <Section title="Destinatario">
-            <div className="space-y-3">
-              <Info label="Nombre" value={template.payeeName} />
-              <Info label="Banco" value={template.payeeBank} />
-              <Info label="Número de cuenta" value={template.payeeAccount} />
-            </div>
-          </Section>
-
-          <Section title="Programación">
-            <div className="space-y-3">
-              <Info label="Cuenta origen" value={fromAccountName} />
-              <Info label="Frecuencia" value={frequencyLabel(template)} />
-              {template.frequency !== "custom" && (
-                <Info
-                  label="Día del mes"
-                  value={String(template.dayOfMonth)}
-                />
-              )}
-            </div>
-          </Section>
-        </div>
-
-        <Section title="Historial de pagos">
-          <div className="mb-4 grid grid-cols-3 gap-3">
-            <Info label="Pagos realizados" value={String(sortedPayments.length)} />
-            <Info label="Total pagado" value={formatMoney(totalPaid)} />
-            <Info
-              label="Último pago"
-              value={
-                lastPayment
-                  ? formatIsoDate(lastPayment.date, "d MMM yyyy")
-                  : null
-              }
-            />
-          </div>
-
-          {sortedPayments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aún no hay pagos registrados para esta plantilla.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border/70 rounded-lg border border-border/70">
-              {sortedPayments.slice(0, HISTORY_LIMIT).map((tx) => (
-                <li
-                  key={tx.id}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                      {formatIsoDate(tx.date, "d MMM yyyy")}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {accounts.find((a) => a.id === tx.account)?.name ??
-                        tx.category}
-                    </p>
-                  </div>
-                  <span className="shrink-0 font-semibold tabular-nums text-foreground">
-                    {formatMoney(Number(tx.amount))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {sortedPayments.length > HISTORY_LIMIT && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Mostrando los últimos {HISTORY_LIMIT} de {sortedPayments.length}{" "}
-              pagos.
-            </p>
-          )}
-        </Section>
-
-        <p className="text-xs text-muted-foreground">
-          Creada el {format(new Date(template.createdAt), "d MMM yyyy", { locale: es })}
-          {" · "}
-          Actualizada el{" "}
-          {format(new Date(template.updatedAt), "d MMM yyyy", { locale: es })}
-        </p>
-
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-          {onEdit ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => onEdit(template)}
-            >
-              Editar
-            </Button>
-          ) : null}
           {onExecute ? (
             <Button
-              type="button"
-              variant="outline"
-              className="rounded-xl"
+              size="lg"
+              className="mt-6 w-full"
+              icon={<Banknote className="h-5 w-5" />}
               disabled={!template.isActive}
-              title={
-                template.isActive
-                  ? undefined
-                  : "Activa la plantilla para poder pagar"
-              }
-              onClick={() => onExecute(template)}
+              onClick={() => leave(() => onExecute(template))}
             >
               Pagar ahora
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="default"
-            className="rounded-xl"
-            onClick={onClose}
-          >
-            Cerrar
-          </Button>
+          {!template.isActive && onExecute ? (
+            <p className="mt-2 text-xs text-gray-500">
+              Activa la plantilla para poder pagar.
+            </p>
+          ) : null}
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={() => leave(() => onEdit(template))}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#0B1829] focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/50"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Editar plantilla
+            </button>
+          ) : null}
+        </section>
+
+        <div className="space-y-4">
+          <SavviTabs
+            tabs={tabs}
+            value={tab}
+            onChange={setTab}
+            ariaLabel="Información de la plantilla"
+          />
+
+          {tab === "details" && (
+            <div role="tabpanel" aria-labelledby="tab-details" className="space-y-5">
+              {template.description?.trim() ? (
+                <section>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Descripción
+                  </h3>
+                  <div className="rounded-xl bg-gray-50 px-4 py-3">
+                    <LinkifiedText text={template.description.trim()} />
+                  </div>
+                </section>
+              ) : null}
+              <DetailGroup title="Destinatario" rows={payeeRows} />
+              <DetailGroup title="Programación" rows={scheduleRows} />
+              <p className="text-center text-xs text-gray-400">
+                Creada el {formatTimestamp(template.createdAt)} · Actualizada el{" "}
+                {formatTimestamp(template.updatedAt)}
+              </p>
+            </div>
+          )}
+
+          {tab === "history" && (
+            <div role="tabpanel" aria-labelledby="tab-history" className="space-y-3">
+              {sortedPayments.length === 0 ? (
+                <p className="rounded-xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                  Aún no hay pagos registrados para esta plantilla.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500">
+                    Total pagado{" "}
+                    <span className="font-semibold tabular-nums text-gray-700">
+                      {formatMoney(totalPaid)}
+                    </span>
+                    {lastPayment ? (
+                      <>
+                        {" · "}Último pago{" "}
+                        <span className="font-semibold text-gray-700">
+                          {formatIsoDate(lastPayment.date)}
+                        </span>
+                      </>
+                    ) : null}
+                  </p>
+                  <ul className="divide-y divide-gray-200/70 rounded-xl bg-gray-50 px-4">
+                    {visiblePayments.map((tx) => (
+                      <li
+                        key={tx.id}
+                        className="flex items-center justify-between gap-3 py-3 text-sm"
+                      >
+                        <span className="text-gray-600">{formatIsoDate(tx.date)}</span>
+                        <span className="font-semibold tabular-nums text-[#0B1829]">
+                          {formatMoney(Number(tx.amount))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {sortedPayments.length > HISTORY_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllHistory((v) => !v)}
+                      className="w-full rounded-lg py-2 text-sm font-medium text-mint-dim transition-colors hover:bg-mint/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/50"
+                    >
+                      {showAllHistory
+                        ? "Ver menos"
+                        : `Ver los ${sortedPayments.length} pagos`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

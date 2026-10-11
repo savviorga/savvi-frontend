@@ -13,6 +13,7 @@ import {
 import { describeReadStep, runReadTool } from "@/lib/ai/advisor/read-tools";
 import { checkProposal, mergeChecks, type ProposalCheck } from "@/lib/ai/advisor/proposals";
 import { sanitizeChart } from "@/lib/ai/advisor/charts";
+import { sanitizeBlock } from "@/lib/ai/advisor/blocks";
 import { addUsage, emptyUsage, type OpenAIUsage } from "@/lib/ai/pricing";
 import type { AdvisorEvent, AdvisorMessage, AdvisorUsage } from "@/features/savvi-ia/types/proposal.types";
 
@@ -104,10 +105,11 @@ function readAdvisorMessages(raw: unknown): AdvisorMessage[] {
   return raw.slice(0, 3).flatMap((item): AdvisorMessage[] => {
     // Tolera que el modelo mande el mensaje como texto suelto.
     if (typeof item === "string") return item.trim() ? [{ text: item.trim().slice(0, MAX_MESSAGE_LENGTH) }] : [];
-    const source = (item ?? {}) as { texto?: unknown; grafico?: unknown };
+    const source = (item ?? {}) as { texto?: unknown; grafico?: unknown; bloque?: unknown };
     const text = typeof source.texto === "string" ? source.texto.trim().slice(0, MAX_MESSAGE_LENGTH) : "";
     const chart = sanitizeChart(source.grafico);
-    return text || chart ? [{ text, chart }] : [];
+    const block = sanitizeBlock(source.bloque);
+    return text || chart || block ? [{ text, chart, block }] : [];
   });
 }
 

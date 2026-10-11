@@ -1,37 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import SavvyBanner from "@/components/Banner/SavvyBanner";
-import { ProgressBar } from "@/components/ProgressBar";
 import CustomTable, { Column } from "@/components/Table/CustomTable";
 import SavviTabs from "@/components/Tabs/SavviTabs";
 import { BarChart3, Repeat } from "lucide-react";
-import { Button } from "@/components/ui/shadcn-button";
-import StatusBadge from "@/components/FeedBack/StatusBadge";
 import ReportTransferTemplate from "@/features/transfer-templates/components/ReportTransferTemplate";
 import ExecuteTransferModal from "@/features/transfer-templates/components/ExecuteTransferModal";
 import EditTransferTemplateModal from "@/features/transfer-templates/components/EditTransferTemplateModal";
 import TransferTemplateDetailModal from "@/features/transfer-templates/components/TransferTemplateDetailModal";
+import TransferKpiCards from "@/features/transfer-templates/components/TransferKpiCards";
+import TransferRowActions from "@/features/transfer-templates/components/TransferRowActions";
+import ServiceAvatar from "@/features/transfer-templates/components/ServiceAvatar";
+import DueStatus, {
+  dueRowClassName,
+} from "@/features/transfer-templates/components/DueStatus";
+import UrgentPaymentsAlert from "@/features/transfer-templates/components/UrgentPaymentsAlert";
 import { useTransferTemplates } from "@/features/transfer-templates/hooks/useTransferTemplates";
 import { useAccounts } from "@/features/accounts/hooks/useAccounts";
 import { useTransactions } from "@/features/transactions/hooks/useTransactions";
 import type { TransferTemplate } from "@/features/transfer-templates/types/transfer.types";
 import {
-  dueProgressVariant,
+  cleanTemplateName,
+  formatIsoDate,
   frequencyLabel,
-  getDueProgressInfo,
 } from "@/features/transfer-templates/utils/schedule";
-import {
-  BanknotesIcon,
-  EyeIcon,
-  PencilSquareIcon,
-  PauseIcon,
-  PlayIcon,
-  TrashIcon,
-} from "@heroicons/react/24/outline";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -41,13 +36,31 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const PAGE_PATH = "/pagos-recurrentes";
+
+// `useSearchParams` necesita un Suspense para el prerender de Next.
 export default function TransferenciasPage() {
+  return (
+    <Suspense fallback={null}>
+      <TransferenciasContent />
+    </Suspense>
+  );
+}
+
+function TransferenciasContent() {
   const [tab, setTab] = useState<"active" | "tabreport">("active");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Enlaces desde las notificaciones: `?ver=<id>` abre el detalle, `?pagar=<id>` el pago.
+  const urlViewId = searchParams.get("ver");
+  const urlPayId = searchParams.get("pagar");
+  const clearUrlAction = () => {
+    if (urlViewId || urlPayId) router.replace(PAGE_PATH, { scroll: false });
+  };
 
   const {
     templates,
     loading: loadingTemplates,
-    reload: reloadTemplates,
     update: updateTemplate,
     toggleActive,
     execute: executeTransfer,
@@ -68,14 +81,35 @@ export default function TransferenciasPage() {
     null
   );
   const [editOpen, setEditOpen] = useState(false);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [viewTemplateId, setViewTemplateId] = useState<string | null>(null);
   // Se resuelve desde `templates` para reflejar cambios tras editar/pagar.
   const viewTemplate = useMemo(
-    () => templates.find((t) => t.id === viewTemplateId) ?? null,
-    [templates, viewTemplateId]
+    () => templates.find((t) => t.id === (viewTemplateId ?? urlViewId)) ?? null,
+    [templates, viewTemplateId, urlViewId]
   );
+
+  const urlPayTemplate = useMemo(
+    () => (urlPayId ? templates.find((t) => t.id === urlPayId && t.isActive) ?? null : null),
+    [templates, urlPayId]
+  );
+  const payTemplate = selectedTemplate ?? urlPayTemplate;
+  const payOpen = executeOpen || urlPayTemplate != null;
+
+  // Lo más urgente arriba (vencidos primero); las pausadas al final.
+  const sortedTemplates = useMemo(
+    () =>
+      [...templates].sort((a, b) => {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        return a.nextDueDate.slice(0, 10).localeCompare(b.nextDueDate.slice(0, 10));
+      }),
+    [templates]
+  );
+
+  const openPay = (t: TransferTemplate) => {
+    setSelectedTemplate(t);
+    setExecuteOpen(true);
+  };
 
   const transferTemplateIds = useMemo(() => new Set(templates.map((t) => t.id)), [templates]);
   const transferTransactions = useMemo(() => {
@@ -102,180 +136,75 @@ export default function TransferenciasPage() {
     [templates.length]
   );
 
-  const executeNow = async (template: TransferTemplate, amount: number) => {
-    await executeTransfer(template.id, {
-      amount,
-    });
-  };
 
   const templateColumns: Column<TransferTemplate>[] = [
     {
       key: "plantilla",
       header: "Plantilla",
+      mobileFullWidth: true,
       render: (t) => (
-        <div>
-          <p className="text-xs text-muted-foreground">{t.name}</p>
-          <p className="font-semibold text-foreground">{t.payeeName}</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setViewTemplateId(t.id)}
+          title={`${t.payeeName} — ${cleanTemplateName(t.name)}`}
+          className="group/name flex min-w-0 max-w-[18rem] items-center gap-3 text-left focus:outline-none"
+        >
+          <ServiceAvatar template={t} />
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-[#0B1829] group-hover/name:text-mint-dim group-focus-visible/name:underline">
+              {t.payeeName}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {cleanTemplateName(t.name)} · {frequencyLabel(t)}
+            </span>
+          </span>
+        </button>
       ),
     },
     {
       key: "lastAmount",
-      header: "Monto anterior",
+      header: "Monto",
       className: "text-right",
       render: (t) => (
-        <span className="font-semibold tabular-nums text-foreground">
+        <span className="whitespace-nowrap text-base font-bold tabular-nums text-[#0B1829]">
           {t.lastAmount == null ? "—" : formatMoney(Number(t.lastAmount))}
         </span>
       ),
     },
     {
       key: "nextDue",
-      header: "Próxima fecha",
+      header: "Próximo pago",
       render: (t) => (
-        <span className="font-medium text-foreground">
-          {format(new Date(t.nextDueDate), "d MMM yyyy", { locale: es })}
+        <span className="block space-y-0.5">
+          <span className="block whitespace-nowrap font-medium text-foreground">
+            {formatIsoDate(t.nextDueDate)}
+          </span>
+          {t.isActive ? (
+            <DueStatus nextDueDate={t.nextDueDate} />
+          ) : (
+            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">
+              En pausa
+            </span>
+          )}
         </span>
       ),
-    },
-    {
-      key: "vencimiento",
-      header: "Hasta el próximo vencimiento",
-      render: (t) => {
-        const { progressPercent, label, daysUntil } = getDueProgressInfo(
-          t.nextDueDate,
-          t.frequency,
-          t.customIntervalDays
-        );
-        return (
-          <div className="min-w-[180px] max-w-[240px]">
-            <ProgressBar
-              label={label}
-              value={progressPercent}
-              variant={dueProgressVariant(daysUntil)}
-            />
-          </div>
-        );
-      },
-    },
-    {
-      key: "frequency",
-      header: "Frecuencia",
-      render: (t) => (
-        <span className="inline-flex rounded-full bg-accent px-3 py-1 text-xs font-semibold  ring-1 ring-emerald-600/20">
-          {frequencyLabel(t)}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Estado",
-      render: (t) => <StatusBadge active={t.isActive} />,
     },
     {
       key: "actions",
       header: "",
-      className: "w-44 text-right",
+      className: "text-right",
       render: (t) => (
-        <div className="flex flex-wrap items-center justify-end gap-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Ver detalle"
-            aria-label="Ver detalle"
-            onClick={() => setViewTemplateId(t.id)}
-          >
-            <EyeIcon className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:bg-accent/10 hover:text-accent"
-            disabled={!t.isActive}
-            title={
-              t.isActive
-                ? "Pagar ahora"
-                : "Activa la plantilla para poder pagar"
-            }
-            aria-label="Pagar ahora"
-            onClick={() => {
-              setSelectedTemplate(t);
-              setExecuteOpen(true);
-            }}
-          >
-            <BanknotesIcon className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Editar plantilla"
-            aria-label="Editar plantilla"
-            onClick={() => {
-              setEditTemplate(t);
-              setEditOpen(true);
-            }}
-          >
-            <PencilSquareIcon className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className={
-              t.isActive
-                ? "text-muted-foreground hover:bg-amber-50 hover:text-amber-700"
-                : "text-muted-foreground hover:bg-accent/10 hover:text-accent"
-            }
-            title={t.isActive ? "Desactivar" : "Activar"}
-            aria-label={t.isActive ? "Desactivar" : "Activar"}
-            onClick={() => void toggleActive(t.id)}
-          >
-            {t.isActive ? (
-              <PauseIcon className="size-4" />
-            ) : (
-              <PlayIcon className="size-4" />
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className={
-              confirmDeleteId === t.id
-                ? "text-red-600 hover:bg-red-50 hover:text-red-700"
-                : "text-muted-foreground hover:bg-red-50 hover:text-red-600"
-            }
-            title={
-              confirmDeleteId === t.id
-                ? "Confirmar eliminación"
-                : "Eliminar plantilla"
-            }
-            aria-label={
-              confirmDeleteId === t.id
-                ? "Confirmar eliminación"
-                : "Eliminar plantilla"
-            }
-            onBlur={() => setConfirmDeleteId(null)}
-            onClick={async () => {
-              if (confirmDeleteId !== t.id) {
-                setConfirmDeleteId(t.id);
-                return;
-              }
-
-              const ok = await removeTemplate(t.id);
-              if (ok) {
-                setConfirmDeleteId(null);
-              }
-            }}
-          >
-            <TrashIcon className="size-4" />
-          </Button>
-        </div>
+        <TransferRowActions
+          template={t}
+          onPay={() => openPay(t)}
+          onView={() => setViewTemplateId(t.id)}
+          onEdit={() => {
+            setEditTemplate(t);
+            setEditOpen(true);
+          }}
+          onToggleActive={() => void toggleActive(t.id)}
+          onDelete={() => removeTemplate(t.id)}
+        />
       ),
     },
   ];
@@ -287,23 +216,23 @@ export default function TransferenciasPage() {
         subtitle="Pagos recurrentes con recordatorios o automáticos."
       />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          {tab === "active"
-            ? "Plantillas guardadas y su próximo vencimiento."
-            : "Sección en construcción."}
-        </p>
-      </div>
+      <TransferKpiCards templates={templates} loading={loadingTemplates} />
+
+      {!loadingTemplates && (
+        <UrgentPaymentsAlert templates={sortedTemplates} onPay={openPay} />
+      )}
 
       <SavviTabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Vistas de transferencias" />
 
       {tab === "active" && (
         <section>
           <CustomTable
-            data={templates}
+            data={sortedTemplates}
             columns={templateColumns}
             loading={loadingTemplates}
             rowKey={(t) => t.id}
+            tableBreakpoint="xl"
+            rowClassName={dueRowClassName}
             totalPages={1}
             onPageChange={() => {}}
           />
@@ -320,36 +249,41 @@ export default function TransferenciasPage() {
       )}
 
       <ExecuteTransferModal
-        open={executeOpen}
+        open={payOpen}
         onClose={() => {
           setExecuteOpen(false);
           setSelectedTemplate(null);
+          clearUrlAction();
         }}
-        template={selectedTemplate}
-        initialAmount={selectedTemplate?.lastAmount ?? null}
+        template={payTemplate}
+        initialAmount={payTemplate?.lastAmount ?? null}
         onConfirm={async ({ amount, description }) => {
-          if (!selectedTemplate) return;
-          await executeNow(selectedTemplate, amount);
-          setExecuteOpen(false);
-          setSelectedTemplate(null);
-          toast.success(description ? description : "Pago ejecutado");
-          await reloadTemplates();
+          if (!payTemplate) return null;
+          // Si falla, el hook ya mostró el error y el modal sigue abierto.
+          const result = await executeTransfer(payTemplate.id, { amount });
+          if (result) toast.success(description ? description : "Pago ejecutado");
+          return result;
         }}
       />
 
       <TransferTemplateDetailModal
         open={viewTemplate != null}
-        onClose={() => setViewTemplateId(null)}
+        onClose={() => {
+          setViewTemplateId(null);
+          clearUrlAction();
+        }}
         template={viewTemplate}
         accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
         payments={viewTemplatePayments}
         onEdit={(t) => {
           setViewTemplateId(null);
+          clearUrlAction();
           setEditTemplate(t);
           setEditOpen(true);
         }}
         onExecute={(t) => {
           setViewTemplateId(null);
+          clearUrlAction();
           setSelectedTemplate(t);
           setExecuteOpen(true);
         }}

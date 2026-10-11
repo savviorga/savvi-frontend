@@ -16,6 +16,8 @@ interface SavviIAConversationProps {
   proposalHandlers?: ProposalHandlers;
   /** Preguntas que salen de tocar un gráfico; sin ella los gráficos no son clicables. */
   onAsk?: (question: string) => void;
+  /** Respuestas a bloques interactivos; sin ella quedan bloqueados (p. ej. mientras responde). */
+  onBlockAnswer?: (messageId: string, answer: string) => void;
 }
 
 export default function SavviIAConversation({
@@ -26,6 +28,7 @@ export default function SavviIAConversation({
   onSelectSuggestion,
   proposalHandlers,
   onAsk,
+  onBlockAnswer,
 }: SavviIAConversationProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -33,6 +36,9 @@ export default function SavviIAConversation({
     const container = scrollRef.current;
     if (container) container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
+
+  const visibleMessages = messages.filter((message) => !message.hidden);
+  const lastUserIndex = visibleMessages.map((m) => m.role).lastIndexOf("user");
 
   useEffect(() => {
     scrollToBottom("smooth");
@@ -45,17 +51,18 @@ export default function SavviIAConversation({
       aria-live="polite"
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
-        {messages
-          .filter((message) => !message.hidden)
-          .map((message) => (
-            <SavviIAMessageBubble
-              key={message.id}
-              message={message}
-              onGrow={scrollToBottom}
-              proposalHandlers={proposalHandlers}
-              onAsk={onAsk}
-            />
-          ))}
+        {visibleMessages.map((message, index) => (
+          <SavviIAMessageBubble
+            key={message.id}
+            message={message}
+            onGrow={scrollToBottom}
+            proposalHandlers={proposalHandlers}
+            onAsk={onAsk}
+            // Solo la respuesta actual es interactiva: si el usuario ya siguió
+            // escribiendo, los bloques anteriores quedan como historial.
+            onBlockAnswer={index > lastUserIndex ? onBlockAnswer : undefined}
+          />
+        ))}
 
         {!isTyping && suggestions.length > 0 && onSelectSuggestion && (
           <div className="pl-10">

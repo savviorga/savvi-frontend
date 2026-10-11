@@ -1,9 +1,14 @@
 "use client";
 
-import { ChangeEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
-import { ArrowUp, Loader2, Mic, Paperclip, Square } from "lucide-react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useCallback, useRef, useState } from "react";
+import { ArrowUp, Loader2, Mic, Paperclip } from "lucide-react";
 import { useS3Upload } from "@/hooks/useS3Upload";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { AiRegisterJobResponse, AiRegisterService } from "../services/ai-register.service";
+import SavviIAVoiceBar from "./SavviIAVoiceBar";
+
+/** Límite de una nota de voz; al llegar se envía sola. */
+const MAX_VOICE_SECONDS = 120;
 
 interface SavviIAComposerProps {
   initialValue?: string;
@@ -20,14 +25,49 @@ export default function SavviIAComposer({
 }: SavviIAComposerProps) {
   const [message, setMessage] = useState(initialValue);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  /** El archivo que se está subiendo es una nota de voz (cambia el aviso). */
+  const [sendingVoice, setSendingVoice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const levelSinkRef = useRef<((level: number) => void) | null>(null);
   const { uploadFiles, uploading } = useS3Upload();
 
+  const uploadAndCreateJob = async (file: File) => {
+    setAttachmentError(null);
+    try {
+      const [uploadResult] = await uploadFiles([file], "savvi-ia");
+      const job = await AiRegisterService.createJob({
+        ...uploadResult,
+        mimeType: file.type,
+        userText: message.trim() || undefined,
+      });
+      onJobCreated(job, file.name);
+      if (message.trim()) {
+        // El texto acompaña al archivo; el registro lo procesa, no el chat.
+        onSendMessage(message.trim(), { reply: false });
+        setMessage("");
+      }
+    } catch (error) {
+      const fallback = "No se pudo procesar el archivo.";
+      setAttachmentError(error instanceof Error ? error.message : fallback);
+    } finally {
+      setSendingVoice(false);
+    }
+  };
+
+  const recorder = useAudioRecorder({
+    maxSeconds: MAX_VOICE_SECONDS,
+    onLevel: (level) => levelSinkRef.current?.(level),
+    onRecorded: (audio, fileName) => {
+      setSendingVoice(true);
+      void uploadAndCreateJob(new File([audio], fileName, { type: audio.type || "audio/webm" }));
+    },
+  });
+
+  const isRecording = recorder.state === "recording";
   const isBusy = disabled || uploading;
+  const hasText = message.trim().length > 0;
+  const error = attachmentError ?? recorder.error;
 
   const submitMessage = (text: string) => {
     const trimmed = text.trim();
@@ -54,37 +94,6 @@ export default function SavviIAComposer({
     fileInputRef.current?.click();
   };
 
-  const createAudioFile = (audioBlob: Blob) => {
-    const extension = audioBlob.type.includes("wav")
-      ? "wav"
-      : audioBlob.type.includes("ogg")
-        ? "ogg"
-        : "webm";
-    const fileName = `savvi-audio-${Date.now()}.${extension}`;
-    return new File([audioBlob], fileName, { type: audioBlob.type || "audio/webm" });
-  };
-
-  const uploadAndCreateJob = async (file: File) => {
-    setAttachmentError(null);
-    try {
-      const [uploadResult] = await uploadFiles([file], "savvi-ia");
-      const job = await AiRegisterService.createJob({
-        ...uploadResult,
-        mimeType: file.type,
-        userText: message.trim() || undefined,
-      });
-      onJobCreated(job, file.name);
-      if (message.trim()) {
-        // El texto acompaña al archivo; el registro lo procesa, no el chat.
-        onSendMessage(message.trim(), { reply: false });
-        setMessage("");
-      }
-    } catch (error) {
-      const fallback = "No se pudo procesar el archivo.";
-      setAttachmentError(error instanceof Error ? error.message : fallback);
-    }
-  };
-
   const onFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -92,124 +101,115 @@ export default function SavviIAComposer({
     await uploadAndCreateJob(file);
   };
 
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-  };
-
-  const toggleRecording = async () => {
+  const startRecording = () => {
     if (isBusy) return;
-
-    if (isRecording) {
-      stopRecording();
-      return;
-    }
-
-    try {
-      setAttachmentError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        setIsRecording(false);
-        if (chunksRef.current.length === 0) {
-          setAttachmentError("No se detectó audio en la grabación.");
-          return;
-        }
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const audioFile = createAudioFile(audioBlob);
-        await uploadAndCreateJob(audioFile);
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setIsRecording(true);
-    } catch {
-      setAttachmentError("No fue posible iniciar el micrófono.");
-      setIsRecording(false);
-    }
+    setAttachmentError(null);
+    void recorder.start();
   };
+
+  const { cancel: cancelRecording, stop: stopRecording } = recorder;
+  const cancel = useCallback(() => cancelRecording(), [cancelRecording]);
 
   const autoResize = (element: HTMLTextAreaElement) => {
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   };
 
+  const timeProgress = Math.min(100, (recorder.seconds / MAX_VOICE_SECONDS) * 100);
+
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-3xl px-4 pb-4 md:px-6">
       <div
-        className={`flex items-end gap-1.5 rounded-3xl border bg-white p-1.5 shadow-lg shadow-slate-200/60 transition-all duration-200 focus-within:border-emerald-300 focus-within:shadow-emerald-500/10 focus-within:ring-4 focus-within:ring-emerald-100 ${
-          isRecording ? "border-red-300 ring-4 ring-red-100" : "border-slate-200"
+        className={`relative flex items-end gap-1.5 overflow-hidden rounded-3xl border bg-white p-1.5 shadow-lg shadow-slate-200/60 transition-all duration-300 focus-within:border-emerald-300 focus-within:shadow-emerald-500/10 focus-within:ring-4 focus-within:ring-emerald-100 ${
+          isRecording ? "border-emerald-300 ring-4 ring-emerald-100" : "border-slate-200"
         }`}
       >
-        <button
-          type="button"
-          onClick={triggerFilePicker}
-          disabled={isBusy}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
-          aria-label="Adjuntar imagen o audio"
-          title="Adjuntar imagen o audio"
-        >
-          <Paperclip className="h-[18px] w-[18px]" aria-hidden />
-        </button>
+        {isRecording ? (
+          <SavviIAVoiceBar
+            seconds={recorder.seconds}
+            maxSeconds={MAX_VOICE_SECONDS}
+            levelSinkRef={levelSinkRef}
+            onCancel={cancel}
+            onSend={stopRecording}
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={triggerFilePicker}
+              disabled={isBusy}
+              className="savvi-wiggle-hover flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 active:scale-90 disabled:opacity-40"
+              aria-label="Adjuntar imagen o audio"
+              title="Adjuntar imagen o audio"
+            >
+              <Paperclip className="h-[18px] w-[18px]" aria-hidden />
+            </button>
 
-        <label htmlFor="savvi-ia-message" className="sr-only">
-          Escribe tu mensaje para Savvi IA
-        </label>
-        <textarea
-          id="savvi-ia-message"
-          ref={textareaRef}
-          rows={1}
-          maxLength={30_000}
-          value={message}
-          onChange={(event) => {
-            setMessage(event.target.value);
-            autoResize(event.target);
-          }}
-          onKeyDown={onKeyDown}
-          disabled={uploading}
-          placeholder={isRecording ? "Escuchando..." : "Escribe sobre tus finanzas..."}
-          className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 md:text-[15px]"
-        />
+            <label htmlFor="savvi-ia-message" className="sr-only">
+              Escribe tu mensaje para Savvi IA
+            </label>
+            <textarea
+              id="savvi-ia-message"
+              ref={textareaRef}
+              rows={1}
+              maxLength={30_000}
+              value={message}
+              onChange={(event) => {
+                setMessage(event.target.value);
+                autoResize(event.target);
+              }}
+              onKeyDown={onKeyDown}
+              disabled={uploading}
+              placeholder={sendingVoice ? "Enviando tu nota de voz…" : "Escribe sobre tus finanzas..."}
+              className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 md:text-[15px]"
+            />
 
-        <button
-          type="button"
-          onClick={toggleRecording}
-          disabled={isBusy}
-          className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
-            isRecording
-              ? "bg-red-50 text-red-500"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          }`}
-          aria-label={isRecording ? "Detener grabación" : "Grabar voz"}
-          title={isRecording ? "Detener grabación" : "Grabar voz"}
-        >
-          {isRecording && (
-            <span className="savvi-pulse-ring absolute inset-0 rounded-full bg-red-400/40" aria-hidden />
-          )}
-          {isRecording ? (
-            <Square className="relative h-4 w-4 fill-current" aria-hidden />
-          ) : (
-            <Mic className="h-[18px] w-[18px]" aria-hidden />
-          )}
-        </button>
+            {/* Sin texto se ofrece grabar; con texto, enviar (cambian con un pequeño salto). */}
+            {!hasText && !uploading ? (
+              <button
+                key="mic"
+                type="button"
+                onClick={startRecording}
+                disabled={isBusy || recorder.state === "requesting"}
+                className="savvi-pop group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/30 transition-transform duration-200 hover:scale-105 active:scale-90 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                aria-label="Grabar nota de voz"
+                title="Grabar nota de voz"
+              >
+                {recorder.state === "requesting" ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+                ) : (
+                  <Mic
+                    className="h-[18px] w-[18px] transition-transform duration-200 group-hover:scale-110"
+                    aria-hidden
+                  />
+                )}
+              </button>
+            ) : (
+              <button
+                key="send"
+                type="submit"
+                disabled={!hasText || isBusy}
+                className="savvi-pop flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/30 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-90 disabled:scale-100 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                aria-label="Enviar mensaje"
+              >
+                {uploading ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+                ) : (
+                  <ArrowUp className="h-[18px] w-[18px]" aria-hidden />
+                )}
+              </button>
+            )}
+          </>
+        )}
 
-        <button
-          type="submit"
-          disabled={!message.trim() || isBusy}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/30 transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95 disabled:scale-100 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
-          aria-label="Enviar mensaje"
-        >
-          {uploading ? (
-            <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
-          ) : (
-            <ArrowUp className="h-[18px] w-[18px]" aria-hidden />
-          )}
-        </button>
+        {/* Avance hacia el límite de la nota de voz. */}
+        {isRecording && (
+          <span
+            className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-gradient-to-r from-emerald-400 to-teal-400 transition-transform duration-300"
+            style={{ transform: `scaleX(${timeProgress / 100})` }}
+            aria-hidden
+          />
+        )}
       </div>
 
       <input
@@ -220,13 +220,29 @@ export default function SavviIAComposer({
         onChange={onFileSelected}
       />
 
-      <div className="mt-2 flex min-h-4 items-center justify-center px-2 text-center text-[11px]">
-        {attachmentError ? (
-          <p className="savvi-msg-in text-red-500">{attachmentError}</p>
+      <div className="mt-2 flex min-h-4 items-center justify-center px-2 text-center text-[11px]" aria-live="polite">
+        {error ? (
+          <p key={error} className="savvi-msg-in text-red-500">
+            {error}
+          </p>
         ) : uploading ? (
-          <p className="savvi-msg-in text-emerald-600">Subiendo archivo...</p>
+          <p className="savvi-msg-in flex items-center gap-1.5 text-emerald-600">
+            <span className="flex items-center gap-0.5" aria-hidden>
+              {[0, 0.15, 0.3].map((delay) => (
+                <span
+                  key={delay}
+                  className="savvi-typing-dot h-1 w-1 rounded-full bg-emerald-500"
+                  style={{ animationDelay: `${delay}s` }}
+                />
+              ))}
+            </span>
+            {sendingVoice ? "Enviando tu nota de voz…" : "Subiendo archivo…"}
+          </p>
         ) : isRecording ? (
-          <p className="savvi-msg-in text-red-500">Grabando... toca el cuadrado para detener.</p>
+          <p className="savvi-msg-in text-slate-500">
+            Te escucho… toca <span className="font-semibold text-emerald-600">enviar</span> o la papelera
+            para descartar
+          </p>
         ) : (
           <p className="text-slate-400">
             Orientación general sobre finanzas personales, no asesoría de inversión.

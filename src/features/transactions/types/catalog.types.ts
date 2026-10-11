@@ -6,6 +6,9 @@ export interface Category {
   type?: CategoryType;
   icon?: string;
   color?: string;
+  /** Grupo (categoría principal) al que pertenece. */
+  parentId?: string | null;
+  isActive?: boolean;
 }
 
 export interface Account {

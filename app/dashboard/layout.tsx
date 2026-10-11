@@ -13,7 +13,7 @@ export default function DashboardLayout({
 }) {
   return (
     <ProtectedRoute>
-      <main className="mx-auto w-full max-w-6xl flex-1 bg-[#F8FAFB] p-6 sm:p-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 bg-[#F8FAFB] p-4 sm:p-8">
         {children}
       </main>
     </ProtectedRoute>

@@ -4,6 +4,10 @@ import { Trash2 } from "lucide-react";
 import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import { cn } from "@/lib/utils";
 import type { Account, Category } from "../../types/catalog.types";
+import {
+  createCategoryIndex,
+  flattenCategoryTree,
+} from "@/features/categories/utils/category-tree";
 import type { TransactionType } from "../../types/transactions.types";
 import {
   BULK_FIELD_LABELS,
@@ -38,13 +42,20 @@ export interface BulkTransactionsTableProps {
   showErrors?: boolean;
 }
 
-/** Categorías compatibles con el tipo elegido, como en el formulario individual. */
+/**
+ * Categorías compatibles con el tipo elegido, como en el formulario individual,
+ * en orden de grupo y con la ruta "Grupo › Subcategoría".
+ */
 function categoriesForType(
   categories: Category[],
   type: TransactionType | null,
-): Category[] {
-  if (!type || type === "transferencia") return categories;
-  return categories.filter((c) => (c.type ?? "egreso") === type);
+): (Category & { label: string })[] {
+  const list =
+    !type || type === "transferencia"
+      ? categories
+      : categories.filter((c) => (c.type ?? "egreso") === type);
+  const index = createCategoryIndex(categories);
+  return flattenCategoryTree(list).map((c) => ({ ...c, label: index.label(c.id) }));
 }
 
 export default function BulkTransactionsTable({
@@ -175,7 +186,7 @@ export default function BulkTransactionsTable({
                     <option value="">—</option>
                     {categoriesForType(categories, row.type).map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {c.label}
                       </option>
                     ))}
                   </select>
@@ -306,7 +317,7 @@ export default function BulkTransactionsTable({
                   <option value="">—</option>
                   {categoriesForType(categories, row.type).map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.label}
                     </option>
                   ))}
                 </select>

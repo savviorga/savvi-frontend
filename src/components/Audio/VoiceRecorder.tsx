@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  audioExtensionFor as extensionFor,
+  formatRecordingTime as formatTime,
+  pickAudioMimeType as pickMimeType,
+} from "@/hooks/useAudioRecorder";
 
 type RecorderState = "idle" | "requesting" | "recording";
 
@@ -17,32 +22,6 @@ export interface VoiceRecorderProps {
 
 /** Número de barras del visualizador. */
 const BARS = 21;
-
-/** Formatos por orden de preferencia; Safari solo soporta mp4. */
-const MIME_CANDIDATES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4",
-  "audio/ogg;codecs=opus",
-];
-
-function pickMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "";
-  return MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
-}
-
-function extensionFor(mimeType: string): string {
-  if (mimeType.includes("mp4")) return "mp4";
-  if (mimeType.includes("ogg")) return "ogg";
-  if (mimeType.includes("wav")) return "wav";
-  return "webm";
-}
-
-function formatTime(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export default function VoiceRecorder({
   onRecorded,

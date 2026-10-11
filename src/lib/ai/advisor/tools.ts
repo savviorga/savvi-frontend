@@ -219,6 +219,84 @@ const CHART_SCHEMA = {
   },
 } as const;
 
+/** `strict` exige que cada objeto declare todas sus claves como requeridas. */
+function blockSchema(tipo: string, description: string, properties: Record<string, unknown>) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    description,
+    required: ["tipo", ...Object.keys(properties)],
+    properties: { tipo: { type: "string", enum: [tipo] }, ...properties },
+  } as const;
+}
+
+const BLOCK_SCHEMAS = [
+  blockSchema(
+    "opciones",
+    "Botones para que el usuario elija tocando en vez de escribir. Su elección te llega como su respuesta.",
+    {
+      pregunta: nullable("string", "Pregunta corta sobre los botones, o null si el texto ya la hace."),
+      multiple: { type: "boolean", description: "true si puede elegir varias (ej. categorías)." },
+      opciones: {
+        type: "array",
+        description: "2 a 6 opciones, escritas en la voz del usuario.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["texto", "descripcion", "icono"],
+          properties: {
+            texto: { type: "string", description: "Máx. 40 caracteres." },
+            descripcion: nullable("string", "Aclaración breve (máx. 90 caracteres), o null."),
+            icono: {
+              type: "string",
+              enum: ["gasto", "ingreso", "ahorro", "presupuesto", "deuda", "meta", "calendario", "tarjeta", "grafico", "pregunta"],
+            },
+          },
+        },
+      },
+    },
+  ),
+  blockSchema("alerta", "Aviso destacado para algo importante de sus números.", {
+    tono: {
+      type: "string",
+      enum: ["peligro", "advertencia", "exito", "info"],
+      description: "peligro: deuda vencida o presupuesto pasado; advertencia: cerca del límite; exito: un logro; info: dato útil.",
+    },
+    titulo: { type: "string", description: "Frase corta con la cifra clave." },
+    detalle: nullable("string", "Una frase de contexto, o null."),
+  }),
+  blockSchema(
+    "simulador",
+    "Simulador de ahorro con un control deslizante: el usuario mueve el aporte mensual y la app calcula en cuánto tiempo llega a la meta.",
+    {
+      titulo: { type: "string", description: "Nombre de la meta, ej. 'Fondo de emergencia'." },
+      meta: { type: "number", description: "Monto total a reunir en COP." },
+      ahorro_actual: nullable("number", "Lo que ya tiene ahorrado para esa meta en COP, o null."),
+      aporte_sugerido: { type: "number", description: "Aporte mensual sugerido según sus números." },
+      aporte_min: { type: "number", description: "Aporte mensual mínimo del control." },
+      aporte_max: { type: "number", description: "Aporte mensual máximo del control." },
+    },
+  ),
+  blockSchema("atajos", "Botones que llevan a otra pantalla de Savvi donde el usuario termina la acción.", {
+    botones: {
+      type: "array",
+      description: "1 a 3 botones.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["texto", "destino"],
+        properties: {
+          texto: { type: "string", description: "Acción corta, ej. 'Ver mis presupuestos'." },
+          destino: {
+            type: "string",
+            enum: ["transacciones", "presupuestos", "pagos_recurrentes", "planificador", "categorias", "cuentas", "dashboard"],
+          },
+        },
+      },
+    },
+  }),
+] as const;
+
 /** Respuesta final: burbujas cortas (markdown + gráfico opcional) + respuestas rápidas. */
 export const REPLY_FORMAT = {
   type: "json_schema",
@@ -236,10 +314,11 @@ export const REPLY_FORMAT = {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["texto", "grafico"],
+            required: ["texto", "grafico", "bloque"],
             properties: {
               texto: { type: "string", description: "Texto del mensaje en markdown." },
               grafico: { anyOf: [CHART_SCHEMA, { type: "null" }] },
+              bloque: { anyOf: [...BLOCK_SCHEMAS, { type: "null" }] },
             },
           },
         },

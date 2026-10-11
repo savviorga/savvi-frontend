@@ -37,6 +37,8 @@ export interface MonthlySummary {
 }
 
 export interface TopExpenseCategory {
+  categoryId: string;
+  /** Nombre de la categoría. */
   category: string;
   total: number;
   count: number;

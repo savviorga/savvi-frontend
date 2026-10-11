@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { format, parse } from "date-fns";
 import {
-  ArrowDownLeft,
-  ArrowLeftRight,
-  ArrowUpRight,
+  CheckCircle2,
+  Paperclip,
   Receipt,
+  Repeat,
   RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import FileUploader from "@/components/File/FileUploader";
 import FileList from "@/components/File/FileList";
 import Modal from "@/components/Modal/Modal";
-import SavvyDatePicker from "@/components/SavvyDatePicker/SavvyDatePicker";
-import SavvySelect from "@/components/Select/Select";
 import { ProgressBar } from "@/components/ProgressBar";
 import {
   CreateTransactionDto,
@@ -21,8 +21,8 @@ import {
 import { Account, Category } from "../../types/catalog.types";
 import { Button } from "@/components/ui/shadcn-button";
 import { cn } from "@/lib/utils";
-import { CurrencyField } from "@/components/Inputs/CurrencyInput/CurrencyInput";
 import type { TransferFrequency, TransferRecurrenceType } from "@/features/transfer-templates/types/transfer.types";
+import { intervalToDays } from "@/features/transfer-templates/utils/interval";
 import { useTransactionDocuments } from "../../hooks/useTransactionDocuments";
 import SmartTransactionCapture from "../SmartTransactionCapture";
 import type { DetectedTransaction } from "../../services/ai-transaction.service";
@@ -38,31 +38,60 @@ import {
   MAX_DOCUMENTS_TO_DELETE,
   MAX_DOCUMENT_SIZE,
 } from "@/lib/document-constraints";
+import TypeSwitch from "../transaction-form/TypeSwitch";
+import AmountHero from "../transaction-form/AmountHero";
+import CategoryChips from "../transaction-form/CategoryChips";
+import AccountChips from "../transaction-form/AccountChips";
+import DateQuickPick from "../transaction-form/DateQuickPick";
+import FormSection from "../transaction-form/FormSection";
+import ExpandableRow from "../transaction-form/ExpandableRow";
+import SwitchIndicator from "../transaction-form/Switch";
+import RecurringFields, {
+  EMPTY_RECURRING,
+  type RecurringForm,
+} from "../transaction-form/RecurringFields";
+import {
+  TYPE_THEME,
+  enterAnimation,
+  isTransactionKind,
+} from "../transaction-form/theme";
 
-/** Tipos como botones: en móvil se elige de un toque, sin abrir un desplegable. */
-const TYPE_OPTIONS = [
-  {
-    value: "ingreso",
-    label: "Ingreso",
-    icon: ArrowDownLeft,
-    activeClass: "border-emerald-500 bg-emerald-50 text-emerald-700",
-  },
-  {
-    value: "egreso",
-    label: "Egreso",
-    icon: ArrowUpRight,
-    activeClass: "border-rose-500 bg-rose-50 text-rose-700",
-  },
-  {
-    value: "transferencia",
-    label: "Transferencia",
-    icon: ArrowLeftRight,
-    activeClass: "border-sky-500 bg-sky-50 text-sky-700",
-  },
-] as const;
+/** Si no hay un tipo recordado se arranca en gasto: es el registro más común. */
+const DEFAULT_TYPE = "egreso";
 
-/** Alto y tipografía cómodos en móvil (16px evita el zoom automático de iOS). */
-const FIELD_MOBILE = "h-11 text-base sm:h-10 sm:text-sm";
+type FieldKey = "type" | "amount" | "category" | "account" | "date" | "payee";
+
+const FIELD_LABELS: Record<FieldKey, string> = {
+  type: "tipo",
+  amount: "monto",
+  category: "categoría",
+  account: "cuenta",
+  date: "fecha",
+  payee: "destinatario",
+};
+
+const ACCOUNT_TITLES: Record<string, string> = {
+  egreso: "¿Con qué cuenta pagaste?",
+  ingreso: "¿A qué cuenta entró?",
+  transferencia: "¿Desde qué cuenta?",
+};
+
+const FREQUENCY_LABELS: Record<TransferFrequency, string> = {
+  weekly: "Semanal",
+  biweekly: "Quincenal",
+  monthly: "Mensual",
+  bimonthly: "Bimestral",
+  custom: "Personalizado",
+};
+
+const formatMoney = (value: number) =>
+  new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const todayIso = () => format(new Date(), "yyyy-MM-dd");
 
 interface TransactionModalProps {
   open: boolean;
@@ -76,6 +105,8 @@ interface TransactionModalProps {
     amount: number;
     fromAccountId: string;
     templateName: string;
+    /** Descripción de la plantilla (la de la transacción). */
+    templateDescription?: string;
     payeeName: string;
     payeeAccount?: string;
     payeeBank?: string;
@@ -123,15 +154,23 @@ export default function TransactionModal({
   /** Adjuntos marcados para borrar; se envían en `documentsToDelete` al guardar. */
   const [documentsToDelete, setDocumentsToDelete] = useState<string[]>([]);
 
-  // Los adjuntos pendientes se reinician al abrir/cerrar o al cambiar de transacción.
-  // Se ajusta en render (y no en un efecto sobre el mismo `useEffect` del formulario)
-  // para no perder lo que el usuario arrastró cuando llegan los catálogos.
-  const attachmentsKey = `${open ? "open" : "closed"}:${editData?.id ?? "new"}`;
-  const [lastAttachmentsKey, setLastAttachmentsKey] = useState(attachmentsKey);
-  if (lastAttachmentsKey !== attachmentsKey) {
-    setLastAttachmentsKey(attachmentsKey);
+  // Lo que se reinicia al abrir/cerrar o al cambiar de transacción (adjuntos
+  // pendientes, secciones abiertas, errores). Se ajusta en render y no en el
+  // efecto del formulario para no perder lo que el usuario arrastró cuando
+  // llegan los catálogos.
+  const sessionKey = `${open ? "open" : "closed"}:${editData?.id ?? "new"}`;
+  const [lastSessionKey, setLastSessionKey] = useState(sessionKey);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  /** Se intentó guardar con datos faltantes: se marcan las secciones. */
+  const [showErrors, setShowErrors] = useState(false);
+  if (lastSessionKey !== sessionKey) {
+    setLastSessionKey(sessionKey);
     setFiles([]);
     setDocumentsToDelete([]);
+    setAiOpen(false);
+    setDocsOpen(false);
+    setShowErrors(false);
   }
 
   // Adjuntos ya guardados (solo en edición). Las URLs caducan en 1 h, así que se
@@ -151,88 +190,53 @@ export default function TransactionModal({
   );
 
   const [recurringEnabled, setRecurringEnabled] = useState(false);
-  const [payeeName, setPayeeName] = useState("");
-  const [payeeAccount, setPayeeAccount] = useState("");
-  const [payeeBank, setPayeeBank] = useState("");
-  const [recurrenceType, setRecurrenceType] =
-    useState<TransferRecurrenceType>("reminder");
-  const [frequency, setFrequency] = useState<TransferFrequency>("monthly");
-  /** Solo UI: se convierte a días al enviar si frequency === "custom". */
-  const [customIntervalAmount, setCustomIntervalAmount] = useState(1);
-  const [customIntervalUnit, setCustomIntervalUnit] = useState<
-    "days" | "weeks" | "months" | "years"
-  >("years");
-  const [dayOfMonth, setDayOfMonth] = useState<number>(1);
+  const [recurring, setRecurring] = useState<RecurringForm>(EMPTY_RECURRING);
   const [keepOpenAfterSave, setKeepOpenAfterSave] = useState(false);
+  /** Sube al guardar y seguir: hace destellar el monto como confirmación. */
+  const [savedFlash, setSavedFlash] = useState(0);
   /** El formulario de creación se abrió con los datos de la última transacción. */
   const [prefilled, setPrefilled] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (editData) {
-      const rawCat = editData.category;
-      const categoryId =
-        categories.find((c) => c.id === rawCat)?.id ??
-        categories.find((c) => c.name === rawCat)?.id ??
-        "";
+    // La recurrencia solo existe al crear; en edición queda apagada.
+    setRecurringEnabled(false);
+    setRecurring(EMPTY_RECURRING);
 
+    if (editData) {
       setPrefilled(false);
       setForm({
         date: editData.date?.slice(0, 10) ?? "",
         type: editData.type,
         amount: editData.amount,
-        category: categoryId,
+        category: editData.categoryId ?? "",
         account: editData.account,
         description: editData.description ?? "",
       });
-
-      // Para no romper el flujo de edición, el módulo recurrente se deshabilita en edición.
-      setRecurringEnabled(false);
-      setPayeeName("");
-      setPayeeAccount("");
-      setPayeeBank("");
-      setRecurrenceType("reminder");
-      setFrequency("monthly");
-      setCustomIntervalAmount(1);
-      setCustomIntervalUnit("years");
-      setDayOfMonth(1);
-    } else {
-      // Creación: se reponen fecha, tipo, cuenta y categoría del último registro
-      // (monto y descripción siempre en blanco).
-      const defaults = resolveTransactionDefaults(
-        loadTransactionDefaults(),
-        accounts,
-        categories,
-      );
-      setPrefilled(
-        Boolean(
-          defaults.date ||
-            defaults.type ||
-            defaults.account ||
-            defaults.category,
-        ),
-      );
-
-      setForm({
-        date: defaults.date,
-        type: defaults.type,
-        amount: null as number | null,
-        category: defaults.category,
-        account: defaults.account,
-        description: "",
-      });
-
-      setRecurringEnabled(false);
-      setPayeeName("");
-      setPayeeAccount("");
-      setPayeeBank("");
-      setRecurrenceType("reminder");
-      setFrequency("monthly");
-      setCustomIntervalAmount(1);
-      setCustomIntervalUnit("years");
-      setDayOfMonth(1);
+      return;
     }
 
+    // Creación: se reponen fecha, tipo, cuenta y categoría del último registro
+    // (monto y descripción siempre en blanco).
+    const defaults = resolveTransactionDefaults(
+      loadTransactionDefaults(),
+      accounts,
+      categories.filter((c) => c.isActive !== false),
+    );
+    setPrefilled(
+      Boolean(
+        defaults.date || defaults.type || defaults.account || defaults.category,
+      ),
+    );
+
+    setForm({
+      date: defaults.date || todayIso(),
+      type: defaults.type || DEFAULT_TYPE,
+      amount: null as number | null,
+      category: defaults.category,
+      account: defaults.account,
+      description: "",
+    });
   }, [editData, open, categories, accounts]);
 
   const markDocumentForDelete = (documentId: string) =>
@@ -243,27 +247,20 @@ export default function TransactionModal({
   const restoreDocument = (documentId: string) =>
     setDocumentsToDelete((prev) => prev.filter((id) => id !== documentId));
 
-  function customIntervalToDays(amount: number, unit: typeof customIntervalUnit): number {
-    const n = Math.max(1, Math.floor(Number(amount)) || 1);
-    switch (unit) {
-      case "days":
-        return n;
-      case "weeks":
-        return n * 7;
-      case "months":
-        return n * 30;
-      case "years":
-        return n * 365;
-      default:
-        return n;
-    }
-  }
-
   // Categorías filtradas por tipo: ingreso → solo categorías tipo ingreso, egreso → solo tipo egreso, transferencia → todas
+  const activeCategories = React.useMemo(
+    () => categories.filter((cat) => cat.isActive !== false),
+    [categories],
+  );
+
+  // Las inactivas no se ofrecen, salvo la que ya tiene la transacción que se edita.
   const filteredCategories = React.useMemo(() => {
-    if (!form.type || form.type === "transferencia") return categories;
-    return categories.filter((cat) => (cat.type ?? "egreso") === form.type);
-  }, [categories, form.type]);
+    const usable = categories.filter(
+      (cat) => cat.isActive !== false || cat.id === editData?.categoryId,
+    );
+    if (!form.type || form.type === "transferencia") return usable;
+    return usable.filter((cat) => (cat.type ?? "egreso") === form.type);
+  }, [categories, form.type, editData?.categoryId]);
 
   // Al cambiar el tipo, limpiar categoría si ya no está en la lista filtrada
   const handleTypeChange = (v: string) => {
@@ -284,8 +281,8 @@ export default function TransactionModal({
     clearTransactionDefaults();
     setPrefilled(false);
     setForm({
-      date: "",
-      type: "",
+      date: todayIso(),
+      type: DEFAULT_TYPE,
       amount: null,
       category: "",
       account: "",
@@ -310,6 +307,15 @@ export default function TransactionModal({
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const toggleRecurring = () => {
+    if (!recurringEnabled && form.date) {
+      // Por defecto vence el mismo día del mes que este pago (máx. 28).
+      const day = parse(form.date, "yyyy-MM-dd", new Date()).getDate();
+      setRecurring((r) => ({ ...r, dayOfMonth: Math.min(28, day || 1) }));
+    }
+    setRecurringEnabled(!recurringEnabled);
+  };
+
   const resetFormForNextTransaction = () => {
     setForm((prev) => ({
       ...prev,
@@ -318,6 +324,74 @@ export default function TransactionModal({
     }));
     setFiles([]);
     setDocumentsToDelete([]);
+    setShowErrors(false);
+    setSavedFlash((n) => n + 1);
+    document.getElementById("tx-amount")?.focus();
+  };
+
+  const isRecurring = recurringEnabled && !editData && Boolean(onSubmitRecurring);
+
+  // Lo obligatorio según el modo: el pago recurrente se registra hoy y usa el
+  // nombre del pago como categoría, así que pide destinatario en su lugar.
+  const requiredFields: FieldKey[] = isRecurring
+    ? ["type", "amount", "account", "payee"]
+    : ["type", "amount", "category", "account", "date"];
+  const missing = requiredFields.filter((key) => {
+    switch (key) {
+      case "type":
+        return !form.type;
+      case "amount":
+        return !(Number(form.amount) > 0);
+      case "category":
+        return !form.category;
+      case "account":
+        return !form.account;
+      case "date":
+        return !form.date;
+      case "payee":
+        return !recurring.payeeName.trim();
+    }
+  });
+  const hasError = (key: FieldKey) => showErrors && missing.includes(key);
+  const progress = Math.round(
+    ((requiredFields.length - missing.length) / requiredFields.length) * 100,
+  );
+
+  const theme = isTransactionKind(form.type) ? TYPE_THEME[form.type] : null;
+  const amountValue = Number(form.amount);
+  const submitLabel = uploading
+    ? "Subiendo archivos…"
+    : editData
+      ? "Guardar cambios"
+      : isRecurring
+        ? "Guardar y programar"
+        : `Guardar ${theme?.noun ?? "movimiento"}${
+            amountValue > 0 ? ` · ${formatMoney(amountValue)}` : ""
+          }`;
+
+  const newFilesCount = files.length;
+  const docsSubtitle = editData
+    ? loadingDocuments
+      ? "Cargando adjuntos…"
+      : `${keptDocuments.length + newFilesCount} adjunto(s)${
+          markedDocuments.length ? ` · ${markedDocuments.length} por eliminar` : ""
+        }`
+    : newFilesCount
+      ? `${newFilesCount} archivo(s) listos para subir`
+      : "Factura, recibo, foto o audio";
+
+  const recurringSubtitle = recurringEnabled
+    ? `${FREQUENCY_LABELS[recurring.frequency]} · ${
+        recurring.payeeName.trim() || "falta a quién le pagas"
+      }`
+    : "Arriendo, servicios, suscripciones…";
+
+  // Cada bloque entra un poco después del anterior al abrir el formulario.
+  let enterIndex = 0;
+  const enter = () => enterAnimation(enterIndex++, 50);
+  const withEnter = (className: string) => {
+    const { className: animation, style } = enter();
+    return { className: cn(className, animation), style };
   };
 
   return (
@@ -326,8 +400,8 @@ export default function TransactionModal({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title={editData ? "Editar transacción" : "Crear transacción"}
-      description="Gestiona aquí tu transacción"
+      title={editData ? "Editar transacción" : "Nueva transacción"}
+      description="Registra un gasto, ingreso o transferencia"
       className="max-w-xl"
       headerIcon={
         <Receipt className="h-5 w-5 text-[#00C49A]" strokeWidth={2} />
@@ -335,8 +409,8 @@ export default function TransactionModal({
     >
       <div className="relative">
         {(loading || uploading) && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-accent" />
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-xl bg-white/80 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-mint" />
             {uploading ? (
               <div className="w-64 max-w-[80%]">
                 <ProgressBar label="Subiendo archivos…" value={uploadPercent} />
@@ -347,43 +421,31 @@ export default function TransactionModal({
           </div>
         )}
 
-        {!editData && (
-          <div className="mb-4">
-            <SmartTransactionCapture
-              categories={categories}
-              accounts={accounts}
-              onDetected={applyDetected}
-              disabled={loading || uploading}
-            />
-          </div>
-        )}
-
         <form
           ref={formRef}
+          noValidate
           onSubmit={async (e) => {
             e.preventDefault();
+
+            if (missing.length > 0) {
+              setShowErrors(true);
+              const first = missing[0];
+              document
+                .getElementById(`tx-section-${first}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              if (first === "amount") document.getElementById("tx-amount")?.focus();
+              if (first === "payee") document.getElementById("tx-payee")?.focus();
+              return;
+            }
 
             const amount = Number(form.amount);
             const description = form.description || undefined;
 
-            if (recurringEnabled && !editData && onSubmitRecurring) {
-              if (!Number.isFinite(amount) || amount <= 0) {
-                toast.error("Ingresa un monto válido para la transferencia");
-                return;
-              }
-              if (!form.account) {
-                toast.error("Selecciona una cuenta para la transferencia");
-                return;
-              }
-              if (!payeeName.trim()) {
-                toast.error("El destinatario es requerido");
-                return;
-              }
-
-              if (frequency === "custom") {
-                const days = customIntervalToDays(
-                  customIntervalAmount,
-                  customIntervalUnit
+            if (isRecurring && onSubmitRecurring) {
+              if (recurring.frequency === "custom") {
+                const days = intervalToDays(
+                  recurring.customIntervalAmount,
+                  recurring.customIntervalUnit,
                 );
                 if (days < 1 || days > 3660) {
                   toast.error("El intervalo debe estar entre 1 y 3660 días");
@@ -391,35 +453,33 @@ export default function TransactionModal({
                 }
               }
 
-              const templateName =
-                (description?.trim() ? description.trim() : payeeName.trim()).slice(
-                  0,
-                  200
-                );
+              // Nombre corto para listas; el texto largo va en la descripción.
+              const templateName = (
+                recurring.name.trim() || recurring.payeeName.trim()
+              ).slice(0, 200);
 
-              const payload = {
+              await onSubmitRecurring({
                 amount,
                 fromAccountId: form.account,
                 templateName,
-                payeeName: payeeName.trim(),
-                payeeAccount: payeeAccount.trim() || undefined,
-                payeeBank: payeeBank.trim() || undefined,
-                recurrenceType,
-                frequency,
+                templateDescription: description?.trim().slice(0, 1000) || undefined,
+                payeeName: recurring.payeeName.trim(),
+                payeeAccount: recurring.payeeAccount.trim() || undefined,
+                payeeBank: recurring.payeeBank.trim() || undefined,
+                recurrenceType: recurring.recurrenceType,
+                frequency: recurring.frequency,
                 customIntervalDays:
-                  frequency === "custom"
-                    ? customIntervalToDays(
-                        customIntervalAmount,
-                        customIntervalUnit
+                  recurring.frequency === "custom"
+                    ? intervalToDays(
+                        recurring.customIntervalAmount,
+                        recurring.customIntervalUnit,
                       )
                     : undefined,
-                dayOfMonth,
+                dayOfMonth: recurring.dayOfMonth,
                 transactionType: form.type as "ingreso" | "egreso" | "transferencia",
                 description,
                 files,
-              };
-
-              await onSubmitRecurring(payload);
+              });
               return;
             }
 
@@ -436,14 +496,12 @@ export default function TransactionModal({
               return;
             }
 
-            const categoryName =
-              categories.find((c) => c.id === form.category)?.name ??
-              form.category;
+            const { category: categoryId, ...formFields } = form;
 
             const submitResult = await onSubmit(
               {
-                ...form,
-                category: categoryName,
+                ...formFields,
+                categoryId,
                 amount,
                 description,
                 files,
@@ -470,439 +528,305 @@ export default function TransactionModal({
               resetFormForNextTransaction();
             }
           }}
-          className="space-y-4"
+          className="space-y-6"
         >
-          {!editData && prefilled && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2">
-              <p className="text-xs text-muted-foreground">
-                Datos de tu última transacción. Revisa la fecha antes de guardar.
-              </p>
-              <button
-                type="button"
-                onClick={clearPrefill}
-                className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-foreground transition hover:bg-white/60"
-              >
-                Limpiar
-              </button>
+          {/* Atajo: dictar o describir el movimiento y que la IA llene el resto */}
+          {!editData && (
+            <div {...enter()}>
+            <ExpandableRow
+              icon={Sparkles}
+              iconClass="bg-mint/15 text-mint-dim"
+              title="Dilo con tu voz"
+              subtitle="Cuéntalo y llenamos el formulario por ti"
+              open={aiOpen}
+              onToggle={() => setAiOpen((v) => !v)}
+              highlight
+            >
+              <SmartTransactionCapture
+                categories={activeCategories}
+                accounts={accounts}
+                onDetected={applyDetected}
+                disabled={loading || uploading}
+              />
+            </ExpandableRow>
             </div>
           )}
 
-          <div>
-            <span className="mb-1.5 block text-sm font-medium text-foreground">
-              Tipo
-            </span>
-            <div
-              role="radiogroup"
-              aria-label="Tipo de transacción"
-              className="grid grid-cols-3 gap-2"
-            >
-              {TYPE_OPTIONS.map((opt) => {
-                const Icon = opt.icon;
-                const isActive = form.type === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    onClick={() => handleTypeChange(opt.value)}
-                    className={cn(
-                      "flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-semibold transition",
-                      "sm:min-h-0 sm:flex-row sm:gap-1.5 sm:py-2.5",
-                      isActive
-                        ? opt.activeClass
-                        : "border-border bg-white text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
+          <div id="tx-section-type" {...withEnter("space-y-3")}>
+            <TypeSwitch value={form.type} onChange={handleTypeChange} />
+            {!editData && prefilled && (
+              <div className="flex items-center justify-between gap-2 px-1 text-xs text-gray-500">
+                <span>Usamos los datos de tu último registro.</span>
+                <button
+                  type="button"
+                  onClick={clearPrefill}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-semibold text-gray-600 transition hover:bg-gray-100"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                  Empezar de cero
+                </button>
+              </div>
+            )}
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Monto
-            </label>
-            <CurrencyField
-              value={form.amount}
-              onChange={(value) =>
-                setForm((f) => ({ ...f, amount: value }))
-              }
-              className="h-12 text-lg font-semibold tabular-nums sm:h-10 sm:text-base"
+          <div {...enter()}>
+          <AmountHero
+            type={form.type}
+            flashKey={savedFlash}
+            value={form.amount}
+            onChange={(value) => setForm((f) => ({ ...f, amount: value }))}
+            autoFocus={!editData}
+            error={hasError("amount")}
+          />
+          </div>
+
+          {!isRecurring && (
+            <div {...enter()}>
+            <CategoryChips
+              categories={filteredCategories}
+              value={form.category}
+              onChange={(category) => setForm((f) => ({ ...f, category }))}
+              error={hasError("category")}
             />
+            </div>
+          )}
+
+          <div {...enter()}>
+          <AccountChips
+            accounts={accounts}
+            value={form.account}
+            onChange={(account) => setForm((f) => ({ ...f, account }))}
+            title={ACCOUNT_TITLES[form.type] ?? "¿Qué cuenta?"}
+            error={hasError("account")}
+          />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <SavvyDatePicker
-                label="Fecha"
-                value={form.date ? new Date(`${form.date}T00:00:00`) : null}
-                onChange={(date) =>
-                  setForm((f) => ({
-                    ...f,
-                    date: date ? date.toISOString().slice(0, 10) : "",
-                  }))
-                }
-                triggerClassName={FIELD_MOBILE}
-              />
+          {!isRecurring && (
+            <div {...enter()}>
+            <DateQuickPick
+              value={form.date}
+              onChange={(date) => setForm((f) => ({ ...f, date }))}
+              error={hasError("date")}
+            />
             </div>
+          )}
 
-            <div>
-              <SavvySelect
-                label="Cuenta"
-                value={form.account}
-                onChange={(v) => setForm((f) => ({ ...f, account: v }))}
-                placeholder="Selecciona una cuenta"
-                options={accounts.map((acc) => ({
-                  label: acc.name,
-                  value: acc.id,
-                }))}
-                triggerClassName={FIELD_MOBILE}
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <SavvySelect
-                label="Categoría"
-                value={form.category}
-                onChange={(v) => setForm((f) => ({ ...f, category: v }))}
-                placeholder={
-                  form.type
-                    ? form.type === "transferencia"
-                      ? "Selecciona una categoría"
-                      : `Solo categorías de ${form.type === "ingreso" ? "ingresos" : "gastos"}`
-                    : "Primero elige el tipo"
-                }
-                options={filteredCategories.map((cat) => ({
-                  label: cat.name,
-                  value: cat.id,
-                }))}
-                triggerClassName={FIELD_MOBILE}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Descripción
-            </label>
+          <div {...enter()}>
+          <FormSection id="tx-section-description" title="Nota" hint="(opcional)">
             <textarea
               name="description"
+              aria-labelledby="tx-section-description-title"
               value={form.description}
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
-              placeholder="Ej. Compra supermercado"
-              className="block w-full resize-y rounded-xl border border-border bg-white px-3 py-2.5 text-base transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25 sm:text-sm"
-              rows={4}
+              placeholder="Ej. Mercado de la semana"
+              rows={2}
+              className="block max-h-48 min-h-[4.5rem] w-full resize-none rounded-xl border border-border bg-white px-3 py-2.5 text-base transition [field-sizing:content] placeholder:text-gray-400 focus:border-mint focus:outline-none focus:ring-2 focus:ring-mint/25 sm:text-sm"
             />
+          </FormSection>
           </div>
 
-      {/** Toggle recurrente (solo en creación, no en edición) */}
-      {!editData && (
-        <div className="flex flex-col gap-2 border-t pt-4">
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={recurringEnabled}
-              onChange={(e) => setRecurringEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-border accent-emerald-600"
-            />
-            <span className="text-sm font-medium text-foreground">
-              Pago recurrente
-            </span>
-          </label>
-
-          {recurringEnabled && (
-            <div className="space-y-3 rounded-xl border border-accent/30 bg-accent/10 p-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  Destinatario
-                </label>
-                <input
-                  type="text"
-                  value={payeeName}
-                  onChange={(e) => setPayeeName(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
-                  placeholder="Ej. Gas Natural"
-                  required
+          <div {...withEnter("space-y-3")}>
+            {!editData && onSubmitRecurring && (
+              <ExpandableRow
+                icon={Repeat}
+                iconClass={recurringEnabled ? "bg-mint/15 text-mint-dim" : undefined}
+                title="Repetir este pago"
+                subtitle={recurringSubtitle}
+                open={recurringEnabled}
+                onToggle={toggleRecurring}
+                trailing={<SwitchIndicator checked={recurringEnabled} />}
+                highlight={hasError("payee")}
+              >
+                <RecurringFields
+                  value={recurring}
+                  onChange={(patch) => setRecurring((r) => ({ ...r, ...patch }))}
+                  payeeError={hasError("payee")}
+                  namePlaceholder={form.description.trim().slice(0, 60) || undefined}
                 />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  Número de cuenta
-                </label>
-                <input
-                  type="text"
-                  value={payeeAccount}
-                  onChange={(e) => setPayeeAccount(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
-                  placeholder="Opcional"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">
-                  Banco
-                </label>
-                <input
-                  type="text"
-                  value={payeeBank}
-                  onChange={(e) => setPayeeBank(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
-                  placeholder="Opcional"
-                />
-              </div>
-
-              <div>
-                <p className="mb-2 text-sm font-medium text-foreground">
-                  Frecuencia
+                <p className="mt-4 rounded-xl bg-mint/[0.06] px-3 py-2 text-xs text-gray-600">
+                  El primer pago se registra hoy y los siguientes quedan en Transferencias.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    { label: "Semanal", value: "weekly" },
-                    { label: "Quincenal", value: "biweekly" },
-                    { label: "Mensual", value: "monthly" },
-                    { label: "Bimestral", value: "bimonthly" },
-                    { label: "Personalizado", value: "custom" },
-                  ] as const).map((opt) => (
-                    <button
-                      type="button"
-                      key={opt.value}
-                      onClick={() => setFrequency(opt.value)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                        frequency === opt.value
-                          ? "border-accent bg-accent text-white"
-                          : "border-border bg-white text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                {frequency === "custom" && (
-                  <div className="mt-3 flex flex-wrap items-end gap-2">
-                    <div className="min-w-[5rem] flex-1">
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Cada
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={3660}
-                        value={customIntervalAmount}
-                        onChange={(e) =>
-                          setCustomIntervalAmount(Number(e.target.value))
+              </ExpandableRow>
+            )}
+
+            <ExpandableRow
+              icon={Paperclip}
+              iconClass={
+                newFilesCount || keptDocuments.length ? "bg-mint/15 text-mint-dim" : undefined
+              }
+              title="Adjuntar documentos"
+              subtitle={docsSubtitle}
+              open={docsOpen}
+              onToggle={() => setDocsOpen((v) => !v)}
+            >
+              <div className="space-y-3">
+                {/* Adjuntos ya guardados: se marcan para borrar y se eliminan al guardar,
+                    así cancelar la edición no pierde archivos. */}
+                {editData && (
+                  <div className="space-y-2">
+                    {!loadingDocuments && savedDocuments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Esta transacción no tiene archivos adjuntos.
+                      </p>
+                    ) : null}
+
+                    {keptDocuments.length > 0 && (
+                      <FileList
+                        files={keptDocuments.map((doc) => ({
+                          name: doc.name,
+                          size: doc.size,
+                          url: doc.url,
+                        }))}
+                        onRemove={(index) =>
+                          markDocumentForDelete(keptDocuments[index].id)
                         }
-                        className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
                       />
-                    </div>
-                    <div className="min-w-[8rem] flex-1">
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Unidad
-                      </label>
-                      <select
-                        value={customIntervalUnit}
-                        onChange={(e) =>
-                          setCustomIntervalUnit(
-                            e.target.value as typeof customIntervalUnit
-                          )
-                        }
-                        className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
-                      >
-                        <option value="days">Día(s)</option>
-                        <option value="weeks">Semana(s)</option>
-                        <option value="months">Mes(es) (30 días)</option>
-                        <option value="years">Año(s) (365 días)</option>
-                      </select>
-                    </div>
-                    <p className="w-full text-xs text-muted-foreground">
-                      ≈{" "}
-                      <span className="font-semibold text-accent-foreground">
-                        {customIntervalToDays(
-                          customIntervalAmount,
-                          customIntervalUnit
-                        )}{" "}
-                        días
-                      </span>{" "}
-                      entre cada vencimiento
-                    </p>
+                    )}
+
+                    {markedDocuments.length > 0 && (
+                      <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                        <p className="text-xs font-semibold text-red-700">
+                          {markedDocuments.length} archivo(s) se eliminarán al guardar
+                        </p>
+                        <ul className="space-y-1">
+                          {markedDocuments.map((doc) => (
+                            <li
+                              key={doc.id}
+                              className="flex items-center justify-between gap-3"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-sm text-red-700 line-through">
+                                {doc.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => restoreDocument(doc.id)}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-100"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                                Restaurar
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
 
-              <div>
-                <p className="mb-2 text-sm font-medium text-foreground">
-                  Tipo
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    { label: "Recordatorio", value: "reminder" },
-                    { label: "Automático", value: "automatic" },
-                  ] as const).map((opt) => (
-                    <button
-                      type="button"
-                      key={opt.value}
-                      onClick={() => setRecurrenceType(opt.value)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                        recurrenceType === opt.value
-                          ? "border-accent bg-accent text-white"
-                          : "border-border bg-white text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <FileUploader
+                  maxFiles={MAX_DOCUMENTS_PER_REQUEST}
+                  maxSize={MAX_DOCUMENT_SIZE}
+                  accept={DOCUMENT_ACCEPT}
+                  label="Arrastra aquí tus comprobantes"
+                  currentFiles={files}
+                  disabled={uploading}
+                  onFilesChange={(newFiles) =>
+                    setFiles((prev) => [...prev, ...newFiles])
+                  }
+                />
+
+                {/* Archivos nuevos pendientes de subir */}
+                <FileList
+                  files={files}
+                  onRemove={(index) =>
+                    setFiles((current) => current.filter((_, i) => i !== index))
+                  }
+                />
+              </div>
+            </ExpandableRow>
+          </div>
+
+          {!editData && !isRecurring && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={keepOpenAfterSave}
+              onClick={() => setKeepOpenAfterSave((v) => !v)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl px-1 py-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-mint/50"
+            >
+              <span className="text-sm text-gray-600">
+                Registrar otro movimiento al guardar
+              </span>
+              <SwitchIndicator checked={keepOpenAfterSave} />
+            </button>
+          )}
+
+          {/* Barra fija: progreso, qué falta y el botón principal siempre a la vista. */}
+          <div className="sticky bottom-0 z-10 -mx-6 -mb-6 border-t border-border bg-white/95 px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+            <div className="mb-2.5 flex items-center gap-3" aria-live="polite">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className={cn(
+                    "relative h-full overflow-hidden rounded-full transition-[width,background-color] duration-500 ease-out",
+                    missing.length ? "bg-mint" : "bg-emerald-500"
+                  )}
+                  style={{ width: `${progress}%` }}
+                >
+                  {/* Brillo que recorre la barra cuando todo está completo. */}
+                  {missing.length === 0 && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/60 to-transparent motion-safe:animate-[savvi-shine_1.2s_ease-out_1] motion-reduce:hidden"
+                    />
+                  )}
                 </div>
               </div>
-
-              {frequency !== "custom" && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-foreground">
-                    Día del mes (1-28)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={28}
-                    value={dayOfMonth}
-                    onChange={(e) => setDayOfMonth(Number(e.target.value))}
-                    className="h-11 w-full rounded-xl border border-border bg-white px-3 text-base focus:border-accent focus:ring-2 focus:ring-accent/30 sm:h-10 sm:text-sm"
-                  />
-                </div>
+              {missing.length > 0 ? (
+                <span
+                  key={missing.join(",")}
+                  className={cn(
+                    "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+                    "shrink-0 text-xs",
+                    showErrors ? "font-semibold text-rose-600" : "text-gray-500",
+                  )}
+                >
+                  Falta: {missing.map((key) => FIELD_LABELS[key]).join(", ")}
+                </span>
+              ) : (
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-600 animate-in fade-in-0 zoom-in-95 duration-200">
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  Todo listo
+                </span>
               )}
             </div>
-          )}
-        </div>
-      )}
 
-      <div className="space-y-3 border-t border-border pt-4">
-        <p className="text-sm font-semibold text-foreground">Documentos</p>
-
-        {/* Adjuntos ya guardados: se marcan para borrar y se eliminan al guardar,
-            así cancelar la edición no pierde archivos. */}
-        {editData && (
-          <div className="space-y-2">
-            {loadingDocuments ? (
-              <p className="text-sm text-muted-foreground">
-                Cargando archivos adjuntos…
-              </p>
-            ) : savedDocuments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Esta transacción no tiene archivos adjuntos.
-              </p>
-            ) : null}
-
-            {keptDocuments.length > 0 && (
-              <FileList
-                files={keptDocuments.map((doc) => ({
-                  name: doc.name,
-                  size: doc.size,
-                  url: doc.url,
-                }))}
-                onRemove={(index) =>
-                  markDocumentForDelete(keptDocuments[index].id)
-                }
-              />
-            )}
-
-            {markedDocuments.length > 0 && (
-              <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
-                <p className="text-xs font-semibold text-red-700">
-                  {markedDocuments.length} archivo(s) se eliminarán al guardar
-                </p>
-                <ul className="space-y-1">
-                  {markedDocuments.map((doc) => (
-                    <li
-                      key={doc.id}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm text-red-700 line-through">
-                        {doc.name}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => restoreDocument(doc.id)}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-100"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                        Restaurar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="flex gap-2 sm:justify-end">
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="outline"
+                className="h-12 rounded-xl border-slate-200 px-4 font-medium text-foreground hover:bg-slate-50 sm:h-10"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                disabled={loading || uploading}
+                className={cn(
+                  "h-12 min-w-0 flex-1 rounded-xl border-0 bg-[#0B1829] px-4 font-semibold text-white transition-all duration-300 hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none sm:h-10 sm:flex-none",
+                  // Listo para guardar: se ilumina con el mint de marca.
+                  missing.length === 0 && "shadow-lg shadow-mint/30 ring-2 ring-mint/60"
+                )}
+              >
+                {missing.length === 0 && !uploading ? (
+                  <CheckCircle2
+                    className="h-4 w-4 shrink-0 text-mint motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:spin-in-90 motion-safe:duration-300"
+                    aria-hidden
+                  />
+                ) : null}
+                <span
+                  key={submitLabel}
+                  className="truncate motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+                >
+                  {submitLabel}
+                </span>
+              </Button>
+            </div>
           </div>
-        )}
-
-        <FileUploader
-          maxFiles={MAX_DOCUMENTS_PER_REQUEST}
-          maxSize={MAX_DOCUMENT_SIZE}
-          accept={DOCUMENT_ACCEPT}
-          label="Arrastra aquí tus PDFs, DOCX, imágenes o audios"
-          disabled={uploading}
-          onFilesChange={(newFiles) =>
-            setFiles((prev) => [...prev, ...newFiles])
-          }
-        />
-
-        {/* Archivos nuevos pendientes de subir */}
-        <FileList
-          files={files}
-          onRemove={(index) =>
-            setFiles((current) => current.filter((_, i) => i !== index))
-          }
-        />
-      </div>
-
-      <div className="space-y-3 border-t border-border pt-4">
-        {!editData && (
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={keepOpenAfterSave}
-              onChange={(e) => setKeepOpenAfterSave(e.target.checked)}
-              className="h-4 w-4 rounded border-border accent-emerald-600"
-            />
-            <span className="text-sm text-muted-foreground">
-              Guardar y dejar este formulario abierto para agregar otra
-            </span>
-          </label>
-        )}
-      </div>
-
-      {/* Acciones siempre a la vista en móvil: el formulario es largo y el botón
-          principal quedaba al final del scroll. */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 flex gap-2 border-t border-border bg-white px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:mb-0 sm:justify-end sm:gap-3 sm:border-0 sm:px-0 sm:pb-0 sm:pt-0">
-        <Button
-          type="button"
-          onClick={onClose}
-          variant="outline"
-          className="h-11 flex-1 rounded-lg border-slate-200 font-normal text-foreground hover:bg-slate-50 sm:h-9 sm:flex-none"
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          variant="default"
-          disabled={loading || uploading}
-          className="h-11 flex-1 rounded-lg border-0 bg-[#0B1829] font-normal text-white hover:bg-[#0B1829]/90 focus-visible:ring-[#00C49A]/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 sm:flex-none"
-        >
-          {uploading
-            ? "Subiendo archivos…"
-            : editData
-              ? "Guardar cambios"
-              : keepOpenAfterSave
-                ? "Guardar y agregar otra"
-                : "Guardar"}
-        </Button>
-      </div>
-    </form>
+        </form>
       </div>
     </Modal>
   );

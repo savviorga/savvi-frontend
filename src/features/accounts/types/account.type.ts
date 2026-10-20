@@ -5,7 +5,10 @@ export interface Account {
   color: string;
   description: string;
   isActive: boolean;
+  /** Saldo inicial (el que se escribe al crear o editar la cuenta). */
   balance?: number;
+  /** Saldo actual: inicial + ingresos − gastos ± transferencias (lo calcula el backend). */
+  currentBalance?: number;
   isCredit?: boolean;
   creditLimit?: number;
   aprRate?: number;

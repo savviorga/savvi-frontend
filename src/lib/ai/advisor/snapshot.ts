@@ -22,7 +22,14 @@ export interface AdvisorCatalog {
     parentId: string | null;
     isGroup: boolean;
   }[];
-  accounts: { id: string; name: string; isCredit: boolean; isActive: boolean }[];
+  accounts: {
+    id: string;
+    name: string;
+    isCredit: boolean;
+    isActive: boolean;
+    /** Saldo actual (inicial + movimientos). */
+    balance?: number;
+  }[];
   debts: { id: string; name: string; remaining: number }[];
 }
 
@@ -132,6 +139,7 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
       name: a.name,
       isCredit: a.isCredit === true,
       isActive: a.isActive !== false,
+      balance: Number(a.currentBalance ?? a.balance ?? 0),
     })),
     debts: debts
       .filter((d) => d.status === "pending")
@@ -159,9 +167,12 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
     `PROMEDIOS: ingreso mensual ${money(averages.monthlyIncome)}, gasto mensual ${money(averages.monthlyExpense)}.`,
     `HISTÓRICO: ${summary.transactions.count} transacciones; tasa de ahorro ${totals.savingsRate === null ? "sin ingresos registrados" : `${totals.savingsRate}%`}.`,
     "",
-    "CUENTAS (id | nombre):",
+    "CUENTAS (id | nombre | saldo actual = inicial + ingresos − gastos ± transferencias):",
     ...(catalog.accounts.length
-      ? catalog.accounts.map((a) => `- ${a.id} | ${a.name}${a.isCredit ? " (tarjeta de crédito)" : ""}${a.isActive ? "" : " (inactiva)"}`)
+      ? catalog.accounts.map(
+          (a) =>
+            `- ${a.id} | ${a.name}${a.isCredit ? " (tarjeta de crédito)" : ""}${a.isActive ? "" : " (inactiva)"} | ${money(a.balance ?? 0)}`,
+        )
       : ["- (ninguna)"]),
     `Saldo total en cuentas de débito: ${money(summary.accounts.totalBalance)}.`,
     "",

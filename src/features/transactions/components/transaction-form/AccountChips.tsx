@@ -10,21 +10,29 @@ export default function AccountChips({
   onChange,
   title,
   error,
+  sectionId = "tx-section-account",
+  hint,
+  clearable = false,
 }: {
   accounts: Account[];
   value: string;
   onChange: (id: string) => void;
   title: string;
   error?: boolean;
+  /** Id de la sección (debe ser único si hay dos selectores en el formulario). */
+  sectionId?: string;
+  hint?: string;
+  /** Tocar la cuenta elegida la deselecciona. */
+  clearable?: boolean;
 }) {
   return (
-    <FormSection id="tx-section-account" title={title} error={error}>
+    <FormSection id={sectionId} title={title} hint={hint} error={error}>
       {accounts.length === 0 ? (
         <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-500">
           Aún no tienes cuentas. Créalas en Cuentas.
         </p>
       ) : (
-        <div role="radiogroup" aria-labelledby="tx-section-account-title" className="flex flex-wrap gap-2">
+        <div role="radiogroup" aria-labelledby={`${sectionId}-title`} className="flex flex-wrap gap-2">
           {accounts.map((acc, index) => {
             const selected = acc.id === value;
             const enter = enterAnimation(index, 30);
@@ -34,7 +42,7 @@ export default function AccountChips({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => onChange(acc.id)}
+                onClick={() => onChange(selected && clearable ? "" : acc.id)}
                 style={enter.style}
                 className={cn(
                   CHIP_BASE,

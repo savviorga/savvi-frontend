@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { getJsonAuthHeaders } from "@/lib/api-auth";
 import { getPublicApiUrl } from "@/lib/public-api-url";
 import type { ApiError } from "@/types/api-error.type";
-import { validateDocumentFile } from "@/lib/document-constraints";
+import { fileMimeType, validateDocumentFile } from "@/lib/document-constraints";
 
 export interface UploadProgress {
   fileName: string;
@@ -44,7 +44,7 @@ async function requestPresignedUrl(
     headers: getJsonAuthHeaders(),
     body: JSON.stringify({
       filename: file.name,
-      contentType: file.type,
+      contentType: fileMimeType(file),
       folder,
       fileSize: file.size,
     }),
@@ -141,7 +141,8 @@ async function uploadSingleFile(
   let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      await uploadToS3WithProgress(url, file, file.type, onProgress, signal);
+      // El Content-Type queda firmado en la URL: debe ser el mismo que se pidió.
+      await uploadToS3WithProgress(url, file, fileMimeType(file), onProgress, signal);
       return { key, name: file.name, size: file.size };
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") throw err;
@@ -159,6 +160,28 @@ async function uploadSingleFile(
     }
   }
   throw lastError;
+}
+
+/**
+ * Sube un archivo suelto con URL prefirmada (valida tipo y tamaño antes). Para
+ * componentes que llevan su propio estado por archivo (p. ej. el chat).
+ */
+export async function uploadFileToS3(
+  file: File,
+  folder: string,
+  onProgress: (percent: number) => void = () => {},
+  signal?: AbortSignal,
+): Promise<S3UploadResult> {
+  const invalid = validateDocumentFile(file);
+  if (invalid) {
+    throw { message: invalid, error: "Validation", statusCode: 400 } satisfies ApiError;
+  }
+  return uploadSingleFile(
+    file,
+    folder,
+    (loaded, total) => onProgress(total > 0 ? Math.round((loaded / total) * 100) : 0),
+    signal,
+  );
 }
 
 export function useS3Upload() {

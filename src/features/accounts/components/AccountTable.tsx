@@ -5,6 +5,14 @@ import CustomTable, { Column } from "@/components/Table/CustomTable";
 import { Account } from "@/features/accounts/types/account.type";
 import StatusBadge from "@/components/FeedBack/StatusBadge";
 
+const formatCop = (value: number) =>
+  new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+
 interface AccountTableProps {
   accounts: Account[];
   loading: boolean;
@@ -33,13 +41,21 @@ export default function AccountTable({
     },
     {
       key: "balance",
-      header: "Saldo",
+      header: "Saldo actual",
       render: (account) => {
-        const val = Number(account.balance ?? 0);
+        const initial = Number(account.balance ?? 0);
+        const val = Number(account.currentBalance ?? initial);
         return (
-          <p className={`font-semibold tabular-nums ${val < 0 ? "text-rose-500" : "text-emerald-600"}`}>
-            {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val)}
-          </p>
+          <div>
+            <p className={`font-semibold tabular-nums ${val < 0 ? "text-rose-500" : "text-emerald-600"}`}>
+              {formatCop(val)}
+            </p>
+            {val !== initial && (
+              <p className="text-xs tabular-nums text-muted-foreground">
+                Inicial: {formatCop(initial)}
+              </p>
+            )}
+          </div>
         );
       },
     },

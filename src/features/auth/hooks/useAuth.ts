@@ -36,6 +36,7 @@ export function useAuth() {
     logout,
     getToken,
     updateUser,
+    replaceSession,
   } = ctx;
 
   const login = useCallback(
@@ -121,6 +122,7 @@ export function useAuth() {
     isAuthenticated,
     getToken,
     updateUser,
+    replaceSession,
     status: loading ? "loading" : isAuthenticated ? "authenticated" : "unauthenticated",
   };
 }

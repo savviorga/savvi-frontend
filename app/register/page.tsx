@@ -3,18 +3,10 @@
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { safeRedirectUrl } from "@/features/auth/utils/safe-redirect";
 import RegisterForm from "@/features/auth/components/RegisterForm";
 import RegisterBrandingPanel from "@/features/auth/components/RegisterBrandingPanel";
 import LoginPageLayout from "@/features/auth/components/LoginPageLayout";
-
-const DEFAULT_REDIRECT = "/transactions";
-
-function safeRedirectUrl(callbackUrl: string | null): string {
-  if (!callbackUrl || typeof callbackUrl !== "string") return DEFAULT_REDIRECT;
-  const path = callbackUrl.startsWith("/") ? callbackUrl : `/${callbackUrl}`;
-  if (!path.startsWith("/") || path.startsWith("//")) return DEFAULT_REDIRECT;
-  return path;
-}
 
 function RegisterPageInner() {
   const searchParams = useSearchParams();

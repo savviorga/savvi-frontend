@@ -3,7 +3,23 @@ import type { User } from "@/features/auth/types/auth.type";
 /** `PATCH /profile` — parcial. */
 export interface UpdateProfileDto {
   name?: string;
-  email?: string;
+}
+
+/** `POST /profile/email`: el email cambia al confirmar el código enviado al nuevo. */
+export interface RequestEmailChangeDto {
+  newEmail: string;
+  currentPassword: string;
+}
+
+/** `POST /profile/email/confirm` */
+export interface ConfirmEmailChangeDto {
+  code: string;
+}
+
+/** Tras un cambio de seguridad el backend cierra las demás sesiones y devuelve una nueva. */
+export interface RotatedSession {
+  user?: import("@/features/auth/types/auth.type").User;
+  access_token?: string;
 }
 
 /** `PATCH /profile/password` */
@@ -22,7 +38,7 @@ export interface DisableTwoFactorDto {
   password: string;
 }
 
-export interface TwoFactorStatusResponse {
+export interface TwoFactorStatusResponse extends RotatedSession {
   message: string;
   twoFactorEnabled: boolean;
 }

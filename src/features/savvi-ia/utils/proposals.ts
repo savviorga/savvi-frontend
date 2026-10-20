@@ -70,6 +70,8 @@ export interface ProposalItemView {
   amount?: { value: number; tone: BadgeTone };
   color?: string;
   warning?: string;
+  /** Archivo que queda como soporte (evidencia del chat). */
+  attachment?: string;
 }
 
 const join = (...parts: (string | number | null | undefined | false)[]) => parts.filter(Boolean).join(" · ");
@@ -98,10 +100,18 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
       }));
     case "transactions":
       return proposal.items.map((item) => ({
-        title: item.description || item.categoryName,
-        detail: join(shortDate(item.date), item.categoryName, item.accountName),
-        amount: { value: item.amount, tone: item.type === "ingreso" ? "income" : "expense" },
+        title: item.description || item.categoryName || "Transferencia",
+        detail: join(
+          shortDate(item.date),
+          item.categoryName,
+          item.toAccountName ? `${item.accountName} → ${item.toAccountName}` : item.accountName,
+        ),
+        amount: {
+          value: item.amount,
+          tone: item.type === "ingreso" ? "income" : item.type === "transferencia" ? "neutral" : "expense",
+        },
         warning: item.warning,
+        attachment: item.evidence?.name,
       }));
     case "budgets":
       return proposal.items.map((item) => ({
@@ -144,7 +154,13 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
 }
 
 const describeItem = (view: ProposalItemView) =>
-  join(view.title, view.detail, view.amount && formatCop(view.amount.value), view.badge?.label);
+  join(
+    view.title,
+    view.detail,
+    view.amount && formatCop(view.amount.value),
+    view.badge?.label,
+    view.attachment && `soporte: ${view.attachment}`,
+  );
 
 /** Resumen de la propuesta para el historial que ve el modelo. */
 export function describeProposalForModel(proposal: Proposal): string {
@@ -171,7 +187,7 @@ export function describeResultsForModel(proposal: Proposal): string {
     const result = proposal.results?.[index];
     const label = describeItem(view);
     if (!proposal.selected[index]) skipped.push(label);
-    else if (result?.ok) ok.push(label);
+    else if (result?.ok) ok.push(result.note ? `${label} (${result.note})` : label);
     else if (result) failed.push(`${label}: ${result.error}`);
   });
 
@@ -200,11 +216,29 @@ const toTransactionDto = (t: TransactionDraft): CreateTransactionDto => ({
   amount: t.amount,
   categoryId: t.categoryId,
   account: t.accountId,
+  toAccount: t.toAccountId ?? null,
   description: t.description,
 });
 
-/** Envía un ítem a su endpoint real con el payload exacto del DTO del backend. */
-async function executeItem(proposal: ProposalData, index: number): Promise<void> {
+/**
+ * Adjunta la evidencia del chat como soporte de la transacción ya creada. Si
+ * falla, la transacción queda igual y se avisa en la nota del resultado.
+ */
+async function attachEvidence(transactionId: string, draft: TransactionDraft): Promise<string | undefined> {
+  if (!draft.evidence) return undefined;
+  try {
+    await TransactionService.confirmUpload(transactionId, [draft.evidence]);
+    return undefined;
+  } catch (error) {
+    return `no se pudo adjuntar ${draft.evidence.name}: ${errorText(error)}`;
+  }
+}
+
+/**
+ * Envía un ítem a su endpoint real con el payload exacto del DTO del backend.
+ * Devuelve una nota si quedó creado con algún detalle.
+ */
+async function executeItem(proposal: ProposalData, index: number): Promise<string | undefined> {
   switch (proposal.kind) {
     case "categories":
       await CategoryService.create({ ...proposal.items[index], isActive: true });
@@ -212,9 +246,11 @@ async function executeItem(proposal: ProposalData, index: number): Promise<void>
     case "accounts":
       await AccountService.create(proposal.items[index]);
       return;
-    case "transactions":
-      await TransactionService.create(toTransactionDto(proposal.items[index]));
-      return;
+    case "transactions": {
+      const draft = proposal.items[index];
+      const created = await TransactionService.create(toTransactionDto(draft));
+      return attachEvidence(created.id, draft);
+    }
     case "budgets": {
       const b = proposal.items[index];
       await BudgetService.createOrUpdate({
@@ -274,8 +310,8 @@ type ResultHandler = (index: number, result: ProposalItemResult) => void;
 
 async function executeOne(proposal: ProposalData, index: number, onResult: ResultHandler): Promise<void> {
   try {
-    await executeItem(proposal, index);
-    onResult(index, { ok: true });
+    const note = await executeItem(proposal, index);
+    onResult(index, note ? { ok: true, note } : { ok: true });
   } catch (error) {
     onResult(index, { ok: false, error: errorText(error) });
   }
@@ -297,9 +333,9 @@ async function executeTransactionBatches(
 ): Promise<void> {
   for (let start = 0; start < indexes.length; start += TRANSACTION_BATCH_SIZE) {
     const batch = indexes.slice(start, start + TRANSACTION_BATCH_SIZE);
+    let created: Awaited<ReturnType<typeof TransactionService.bulk>>;
     try {
-      await TransactionService.bulk(batch.map((index) => toTransactionDto(proposal.items[index])));
-      batch.forEach((index) => onResult(index, { ok: true }));
+      created = await TransactionService.bulk(batch.map((index) => toTransactionDto(proposal.items[index])));
     } catch (error) {
       if (isRejectedBatch(error)) {
         for (const index of batch) await executeOne(proposal, index, onResult);
@@ -307,6 +343,13 @@ async function executeTransactionBatches(
         const result: ProposalItemResult = { ok: false, error: errorText(error) };
         batch.forEach((index) => onResult(index, result));
       }
+      continue;
+    }
+    // El backend devuelve las transacciones en el mismo orden del lote.
+    for (const [position, index] of batch.entries()) {
+      const transaction = created[position];
+      const note = transaction ? await attachEvidence(transaction.id, proposal.items[index]) : undefined;
+      onResult(index, note ? { ok: true, note } : { ok: true });
     }
   }
 }

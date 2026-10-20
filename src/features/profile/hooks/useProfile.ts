@@ -6,7 +6,8 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { User } from "@/features/auth/types/auth.type";
 import { isApiError, getErrorMessages, type ApiError } from "@/types/api-error.type";
 import { ProfileService } from "../services/profile.service";
-import type { ChangePasswordDto, ProfileSummary, UpdateProfileDto } from "../types/profile.type";
+import type { CodeSentResponse } from "@/features/auth/types/auth.type";
+import type { ChangePasswordDto, ProfileSummary, RotatedSession, UpdateProfileDto } from "../types/profile.type";
 
 /** Resultado de una mutación: `ok` o los mensajes del API para mostrarlos en el formulario. */
 export type MutationFailure = { ok: false; status: number; messages: string[] };
@@ -20,7 +21,16 @@ function toFailure(error: unknown, fallback: string): MutationFailure {
 }
 
 export function useProfile() {
-  const { updateUser } = useAuth();
+  const { updateUser, replaceSession } = useAuth();
+
+  /** Guarda la sesión nueva que llega tras un cambio de seguridad. */
+  const keepSession = (session: RotatedSession) => {
+    if (session.user && session.access_token) {
+      replaceSession({ user: session.user, access_token: session.access_token });
+      const user = session.user;
+      setSummary((prev) => (prev ? { ...prev, user: { ...prev.user, ...user } } : prev));
+    }
+  };
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +75,9 @@ export function useProfile() {
 
   const changePassword = async (payload: ChangePasswordDto): Promise<MutationResult> => {
     try {
-      const { message } = await ProfileService.changePassword(payload);
-      toast.success(message || "Contraseña actualizada");
+      const { message, ...session } = await ProfileService.changePassword(payload);
+      keepSession(session);
+      toast.success(message || "Contraseña actualizada. Cerramos tus otras sesiones.");
       return { ok: true, data: undefined };
     } catch (err) {
       return toFailure(err, "No pudimos cambiar la contraseña.");
@@ -103,12 +114,38 @@ export function useProfile() {
 
   const disableTwoFactor = async (password: string): Promise<MutationResult> => {
     try {
-      const { message, twoFactorEnabled } = await ProfileService.disableTwoFactor({ password });
+      const { message, twoFactorEnabled, ...session } = await ProfileService.disableTwoFactor({ password });
+      keepSession(session);
       setTwoFactorEnabled(twoFactorEnabled);
       toast.success(message || "Verificación en dos pasos desactivada");
       return { ok: true, data: undefined };
     } catch (err) {
       return toFailure(err, "No pudimos desactivar la verificación en dos pasos.");
+    }
+  };
+
+  /** Paso 1 del cambio de email: contraseña actual + código al email nuevo. */
+  const requestEmailChange = async (
+    newEmail: string,
+    currentPassword: string,
+  ): Promise<MutationResult<CodeSentResponse>> => {
+    try {
+      const data = await ProfileService.requestEmailChange({ newEmail, currentPassword });
+      return { ok: true, data };
+    } catch (err) {
+      return toFailure(err, "No pudimos enviar el código al email nuevo.");
+    }
+  };
+
+  /** Paso 2: con el código correcto el email cambia y se renueva la sesión. */
+  const confirmEmailChange = async (code: string): Promise<MutationResult<string>> => {
+    try {
+      const session = await ProfileService.confirmEmailChange({ code });
+      keepSession(session);
+      toast.success("Email actualizado. Cerramos tus otras sesiones.");
+      return { ok: true, data: session.user.email };
+    } catch (err) {
+      return toFailure(err, "No pudimos verificar el código.");
     }
   };
 
@@ -119,6 +156,8 @@ export function useProfile() {
     reload: load,
     update,
     changePassword,
+    requestEmailChange,
+    confirmEmailChange,
     requestTwoFactorEnable,
     confirmTwoFactorEnable,
     disableTwoFactor,

@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../components/SavviIAMessageBubble";
-import { EMPTY_USAGE, readTotals, type UsageTotals } from "./usage";
+import { readTotals, type UsageTotals } from "./usage";
 
 /**
  * Persistencia temporal del chat en localStorage, una conversación por usuario.
@@ -8,8 +8,8 @@ import { EMPTY_USAGE, readTotals, type UsageTotals } from "./usage";
  */
 
 const KEY_PREFIX = "savvi_ia_chat:";
-/** Acumulado de todas las conversaciones; sobrevive a "Nueva conversación". */
-const USAGE_KEY_PREFIX = "savvi_ia_usage:";
+/** Clave antigua del acumulado (ahora vive en el backend); se borra al cargar. */
+const LEGACY_USAGE_KEY_PREFIX = "savvi_ia_usage:";
 const VERSION = 1;
 /** Suficiente para retomar el hilo sin crecer sin límite (el modelo solo ve los últimos 30). */
 const MAX_STORED_MESSAGES = 200;
@@ -83,18 +83,10 @@ export function clearChat(userId: string): void {
   }
 }
 
-export function loadLifetimeUsage(userId: string): UsageTotals {
+/** El acumulado de consumo ahora lo lleva el backend: se limpia la copia local vieja. */
+export function clearLegacyUsage(userId: string): void {
   try {
-    const raw = localStorage.getItem(`${USAGE_KEY_PREFIX}${userId}`);
-    return raw ? readTotals(JSON.parse(raw)) : EMPTY_USAGE;
-  } catch {
-    return EMPTY_USAGE;
-  }
-}
-
-export function saveLifetimeUsage(userId: string, usage: UsageTotals): void {
-  try {
-    localStorage.setItem(`${USAGE_KEY_PREFIX}${userId}`, JSON.stringify(usage));
+    localStorage.removeItem(`${LEGACY_USAGE_KEY_PREFIX}${userId}`);
   } catch {
     /* sin acceso a localStorage */
   }

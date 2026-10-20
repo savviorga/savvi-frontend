@@ -16,6 +16,9 @@ export const TEXT_MODEL = process.env.IA_MODEL_TEXTO?.trim() || "gpt-4o-mini";
 /** Modelo conversacional de Savvi IA; por defecto el mismo de texto. */
 export const CHAT_MODEL = process.env.IA_MODEL_CHAT?.trim() || TEXT_MODEL;
 
+/** Modelo con visión que lee las evidencias (fotos, PDF); por defecto el del chat. */
+export const VISION_MODEL = process.env.IA_MODEL_VISION?.trim() || CHAT_MODEL;
+
 export class OpenAIError extends Error {
   constructor(
     message: string,
@@ -63,6 +66,7 @@ async function toOpenAIError(res: Response): Promise<OpenAIError> {
 export async function openAiJson<T>(
   path: string,
   body: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
     method: "POST",
@@ -71,6 +75,7 @@ export async function openAiJson<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) throw await toOpenAIError(res);

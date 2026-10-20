@@ -1,5 +1,7 @@
 import { OpenAIError, TEXT_MODEL, errorResponse, openAiJson } from "@/lib/openai";
 import { requireSession } from "@/lib/ai-session";
+import { assertAiQuota, recordAiUsage } from "@/lib/ai/quota";
+import { addUsage, emptyUsage } from "@/lib/ai/pricing";
 import {
   buildContextBlock,
   EXTRACTION_RULES,
@@ -148,7 +150,7 @@ function buildPrompt(
 /** Texto libre → lista de movimientos para registrar en lote. */
 export async function POST(request: Request): Promise<Response> {
   try {
-    await requireSession(request);
+    const session = await requireSession(request);
 
     const body = (await request.json()) as ParseRequestBody;
     const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -165,6 +167,7 @@ export async function POST(request: Request): Promise<Response> {
     const current = readDraftRows(body.current);
     const history = readHistory(body.history);
 
+    await assertAiQuota(session);
     const completion = await openAiJson<ChatCompletion>("/chat/completions", {
       model: TEXT_MODEL,
       temperature: 0,
@@ -182,6 +185,10 @@ export async function POST(request: Request): Promise<Response> {
       ],
       response_format: { type: "json_schema", json_schema: RESPONSE_SCHEMA },
     });
+
+    const usage = emptyUsage(TEXT_MODEL);
+    addUsage(usage, completion.model ?? TEXT_MODEL, completion.usage);
+    await recordAiUsage(session, "parse-transactions", usage);
 
     const content = completion.choices?.[0]?.message?.content;
     if (!content) {

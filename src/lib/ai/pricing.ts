@@ -27,7 +27,13 @@ const PRICES: Record<string, ModelPrice> = {
   "gpt-6-luna": { input: 0.1, cachedInput: 0.01, output: 0.5 },
   "gpt-6-sol": { input: 2, cachedInput: 0.2, output: 10 },
   "gpt-6-astra": { input: 10, cachedInput: 1, output: 50 },
+  // Transcripción: tokens de audio de entrada y de texto de salida.
+  "gpt-4o-mini-transcribe": { input: 1.25, cachedInput: 1.25, output: 5 },
+  "gpt-4o-transcribe": { input: 2.5, cachedInput: 2.5, output: 10 },
 };
+
+/** `whisper-1` se cobra por minuto de audio, no por tokens. */
+const WHISPER_USD_PER_MINUTE = 0.006;
 
 function envPrice(): ModelPrice | null {
   const read = (name: string) => {
@@ -88,4 +94,23 @@ export function addUsage(total: AdvisorUsage, model: string, usage: OpenAIUsage 
   } else {
     total.unpricedCalls += 1;
   }
+}
+
+/** `usage` de `/audio/transcriptions`: tokens (gpt-4o-*-transcribe) o duración (whisper-1). */
+export interface TranscriptionUsage {
+  type?: "tokens" | "duration";
+  input_tokens?: number;
+  output_tokens?: number;
+  seconds?: number;
+}
+
+export function transcriptionUsage(model: string, usage: TranscriptionUsage | undefined): AdvisorUsage {
+  const total = emptyUsage(model);
+  if (usage?.type === "duration" && typeof usage.seconds === "number") {
+    total.calls = 1;
+    total.costUsd = (usage.seconds / 60) * WHISPER_USD_PER_MINUTE;
+    return total;
+  }
+  addUsage(total, model, { prompt_tokens: usage?.input_tokens, completion_tokens: usage?.output_tokens });
+  return total;
 }

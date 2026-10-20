@@ -121,15 +121,26 @@ export const ADVISOR_TOOLS = [
   }),
   listTool(
     "proponer_transacciones",
-    "Propone registrar ingresos o gastos que el usuario te contó. Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
+    "Propone registrar ingresos, gastos o transferencias entre cuentas del usuario que te contó o que salen de una evidencia que adjuntó (recibo, factura, comprobante). Un pago a otra persona es un egreso; transferencia es solo mover plata entre dos cuentas suyas (p. ej. de Ahorros a Nequi). Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
     "transacciones",
     {
       date: { type: "string", description: "Fecha YYYY-MM-DD." },
-      type: { type: "string", enum: ["ingreso", "egreso"] },
+      type: { type: "string", enum: ["ingreso", "egreso", "transferencia"] },
       amount: { type: "number", description: "Monto positivo en COP." },
-      categoryId: ids("id de una categoría del catálogo cuyo tipo coincida con type."),
-      accountId: ids("id de una cuenta del catálogo."),
+      categoryId: nullable(
+        "string",
+        "id de una categoría del catálogo cuyo tipo coincida con type. En transferencia puede ser null.",
+      ),
+      accountId: ids("id de una cuenta del catálogo (en transferencia, la de origen)."),
+      toAccountId: nullable(
+        "string",
+        "Solo transferencia: id de la cuenta destino del catálogo, distinta de accountId. null en ingresos y gastos.",
+      ),
       description: nullable("string", "Descripción corta, o null."),
+      evidencia: nullable(
+        "string",
+        "id de la evidencia (E1, E2…) de la que sale este movimiento: el archivo queda como soporte de la transacción. null si no viene de un archivo.",
+      ),
     },
   ),
   listTool(

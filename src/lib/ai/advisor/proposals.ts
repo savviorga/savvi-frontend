@@ -9,6 +9,7 @@ import type {
   AccountDraft,
   BudgetDraft,
   CategoryDraft,
+  ChatAttachment,
   DebtDraft,
   DebtPaymentDraft,
   ProposalData,
@@ -150,33 +151,58 @@ function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): Acco
   });
 }
 
-function transactions(args: Args, catalog: AdvisorCatalog, problems: string[], userText: string): TransactionDraft[] {
+function transactions(
+  args: Args,
+  catalog: AdvisorCatalog,
+  problems: string[],
+  userText: string,
+  evidence: Map<string, ChatAttachment>,
+): TransactionDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
   const rows = list(args, "transacciones", problems, MAX_TRANSACTIONS);
   const known = rows.length >= VERIFY_FROM_ITEMS ? amountsIn(userText) : null;
   return rows.flatMap((item, i): TransactionDraft[] => {
-    const type = item.type === "ingreso" ? "ingreso" : "egreso";
+    const type = item.type === "ingreso" || item.type === "transferencia" ? item.type : "egreso";
+    const isTransfer = type === "transferencia";
     const amount = positive(item.amount);
     const date = isoDate(item.date);
     const category = find.category(item.categoryId);
     const account = find.account(item.accountId);
+    const toAccount = isTransfer ? find.account(item.toAccountId) : undefined;
     const label = `Transacción ${i + 1}`;
     if (!amount) return fail(`${label}: monto inválido.`);
     if (!date) return fail(`${label}: fecha inválida (usa YYYY-MM-DD).`);
-    if (!category) return fail(`${label}: categoryId no existe en el catálogo.`);
-    if (category.type !== type) return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
+    // En transferencias la categoría es opcional; si viene, debe existir.
+    if (!category && (!isTransfer || item.categoryId != null)) {
+      return fail(`${label}: categoryId no existe en el catálogo.`);
+    }
+    if (category && !isTransfer && category.type !== type) {
+      return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
+    }
     if (!account) return fail(`${label}: accountId no existe en el catálogo.`);
+    if (isTransfer && !toAccount) {
+      return fail(`${label}: toAccountId no existe en el catálogo (una transferencia va entre dos cuentas del usuario; un pago a otra persona es un egreso).`);
+    }
+    if (toAccount && toAccount.id === account.id) {
+      return fail(`${label}: la cuenta destino debe ser distinta de la de origen.`);
+    }
+    const evidenceId = text(item.evidencia, 10)?.toUpperCase();
+    const source = evidenceId ? evidence.get(evidenceId) : undefined;
+    if (evidenceId && !source) problems.push(`${label}: la evidencia ${evidenceId} no existe; se registra sin soporte.`);
     return [
       {
         date,
         type,
         amount,
-        categoryId: category.id,
-        categoryName: category.name,
+        categoryId: category?.id,
+        categoryName: category?.name,
         accountId: account.id,
         accountName: account.name,
+        toAccountId: toAccount?.id,
+        toAccountName: toAccount?.name,
         description: text(item.description, 500),
+        evidence: source ? { key: source.key, name: source.name, size: source.size } : undefined,
         warning:
           known && !known.has(amount)
             ? "Este monto no aparece en lo que escribiste: revísalo antes de registrarlo."
@@ -305,8 +331,10 @@ function recurring(args: Args, catalog: AdvisorCatalog, problems: string[]): Rec
 }
 
 /**
- * @param userText lo que escribió el usuario en la conversación: los montos de
- * una lista larga se verifican contra él para marcar los que el modelo inventó.
+ * @param userText lo que escribió el usuario en la conversación (incluida la
+ * lectura de sus evidencias): los montos de una lista larga se verifican contra
+ * él para marcar los que el modelo inventó.
+ * @param evidence evidencias de la conversación por id (E1, E2…).
  */
 export function checkProposal(
   name: ProposalToolName,
@@ -314,6 +342,7 @@ export function checkProposal(
   catalog: AdvisorCatalog,
   existingBudgets: Budget[],
   userText = "",
+  evidence: Map<string, ChatAttachment> = new Map(),
 ): ProposalCheck {
   const problems: string[] = [];
   const message = text(args.mensaje, 2000);
@@ -327,7 +356,7 @@ export function checkProposal(
       case "proponer_cuentas":
         return wrap("accounts", accounts(args, catalog, problems));
       case "proponer_transacciones":
-        return wrap("transactions", transactions(args, catalog, problems, userText));
+        return wrap("transactions", transactions(args, catalog, problems, userText, evidence));
       case "proponer_presupuestos":
         return wrap("budgets", budgets(args, catalog, problems, existingBudgets));
       case "proponer_deudas":

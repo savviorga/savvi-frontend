@@ -1,20 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import {
-  AlertTriangle,
-  ArrowRightLeft,
-  Check,
-  CheckCircle2,
-  ChartPie,
-  HandCoins,
-  Landmark,
-  Loader2,
-  Receipt,
-  Repeat,
-  Tag,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, ChartPie, Check, CheckCircle2, HandCoins, Landmark, Loader2, Paperclip, Receipt, Repeat, Tag, XCircle } from "lucide-react";
 import type { Proposal, ProposalKind } from "../types/proposal.types";
 import {
   PROPOSAL_META,
@@ -163,7 +150,19 @@ export default function SavviIAProposalCard({
                       {item.warning}
                     </span>
                   )}
+                  {item.attachment && (
+                    <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
+                      <span className="truncate">Soporte: {item.attachment}</span>
+                    </span>
+                  )}
                   {result && !result.ok && <span className="mt-0.5 block text-xs text-red-600">{result.error}</span>}
+                  {result?.ok && result.note && (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                      Registrada, pero {result.note}
+                    </span>
+                  )}
                 </span>
 
                 {item.amount && (

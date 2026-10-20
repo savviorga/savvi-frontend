@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Loader2, Paperclip, Search, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, FileText, ImageIcon, Loader2, Mic, Paperclip, Search, XCircle } from "lucide-react";
 import SavviIAAvatar from "./SavviIAAvatar";
 import SavviIAProposalCard from "./SavviIAProposalCard";
 import SavviIAChart from "./SavviIAChart";
 import SavviIAMarkdown from "./SavviIAMarkdown";
 import SavviIABlock from "./blocks/SavviIABlock";
-import type { AdvisorBlock, AdvisorChart, AdvisorStep, Proposal } from "../types/proposal.types";
+import type { AdvisorBlock, AdvisorChart, AdvisorStep, ChatAttachment, Proposal } from "../types/proposal.types";
+import { formatFileSize, isPdf } from "../utils/evidence";
 
 export interface ChatMessage {
   id: string;
@@ -34,6 +35,10 @@ export interface ChatMessage {
   suggestions?: string[];
   /** Se envía al modelo pero no se muestra (p. ej. resultados de crear). */
   hidden?: boolean;
+  /** Mensaje del usuario dictado por nota de voz (el texto es la transcripción). */
+  viaVoice?: boolean;
+  /** Evidencias (recibos, facturas) que el usuario adjuntó a este mensaje. */
+  attachments?: ChatAttachment[];
 }
 
 export interface ProposalHandlers {
@@ -129,6 +134,25 @@ export default function SavviIAMessageBubble({
           </p>
         )}
 
+        {message.attachments && message.attachments.length > 0 && (
+          <ul className="mb-1 flex max-w-full flex-wrap justify-end gap-1.5" aria-label="Evidencias adjuntas">
+            {message.attachments.map((attachment) => {
+              const Icon = isPdf(attachment.mimeType) ? FileText : ImageIcon;
+              return (
+                <li
+                  key={attachment.key}
+                  className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-sm"
+                  title={attachment.name}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+                  <span className="truncate font-medium">{attachment.name}</span>
+                  <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(attachment.size)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
         {(message.text || message.attachmentName || status) && (
         <article className={`rounded-2xl px-4 py-2.5 shadow-sm ${bubbleClass}`}>
           {isAssistant && !message.isError ? (
@@ -136,9 +160,17 @@ export default function SavviIAMessageBubble({
               <SavviIAMarkdown>{visible}</SavviIAMarkdown>
             </div>
           ) : (
-            <p className={`whitespace-pre-line text-sm leading-relaxed md:text-[15px] ${done ? "" : "savvi-caret"}`}>
-              {visible}
-            </p>
+            <>
+              {message.viaVoice && (
+                <span className="mb-1 inline-flex items-center gap-1 text-[11px] font-medium text-white/80">
+                  <Mic className="h-3 w-3" aria-hidden />
+                  Nota de voz
+                </span>
+              )}
+              <p className={`whitespace-pre-line text-sm leading-relaxed md:text-[15px] ${done ? "" : "savvi-caret"}`}>
+                {visible}
+              </p>
+            </>
           )}
 
           {(message.attachmentName || status) && (

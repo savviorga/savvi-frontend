@@ -1,11 +1,15 @@
 import { getJsonAuthHeaders } from "@/lib/api-auth";
 import { parseHttpErrorResponse } from "@/lib/parse-http-error-response";
-import type { AdvisorEvent, AdvisorStep } from "../types/proposal.types";
+import type { AdvisorEvent, AdvisorStep, ChatAttachment } from "../types/proposal.types";
 
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  /** Evidencias del mensaje del usuario (con su lectura, si ya se hizo). */
+  attachments?: ChatAttachment[];
 }
+
+export type EvidenceAnalysis = Extract<AdvisorEvent, { type: "evidence" }>["items"][number];
 
 export type ChatReply = Omit<Extract<AdvisorEvent, { type: "reply" }>, "type">;
 
@@ -20,6 +24,8 @@ export const AiChatService = {
     messages: ChatTurn[],
     onStep?: (step: AdvisorStep) => void,
     signal?: AbortSignal,
+    /** Lo que se leyó de las evidencias nuevas: hay que guardarlo en el mensaje. */
+    onEvidence?: (items: EvidenceAnalysis[]) => void,
   ): Promise<ChatReply> => {
     const res = await fetch("/api/ai/chat", {
       method: "POST",
@@ -38,6 +44,7 @@ export const AiChatService = {
       if (!line.trim()) return null;
       const event = JSON.parse(line) as AdvisorEvent;
       if (event.type === "step") onStep?.(event.step);
+      if (event.type === "evidence") onEvidence?.(event.items);
       if (event.type === "error") {
         // `usage` viaja con el error: esas llamadas al modelo también se cobraron.
         throw { message: event.message, error: "IA", statusCode: event.statusCode, usage: event.usage };

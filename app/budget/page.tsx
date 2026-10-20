@@ -14,19 +14,12 @@ import BudgetTable, {
 } from "@/features/budgets/components/BudgetTable";
 import { BudgetModal } from "@/features/budgets/components/BudgetModal";
 import toast from "react-hot-toast";
+import { todayLocalISO } from "@/lib/dates";
 
-function getCurrentMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { start, end };
-}
-
+/** La fecha `YYYY-MM-DD` cae en el mes en curso (sin pasar por UTC). */
 function isInCurrentMonth(dateStr: string) {
   if (!dateStr) return false;
-  const date = new Date(dateStr);
-  const { start, end } = getCurrentMonthRange();
-  return date >= start && date <= end;
+  return dateStr.slice(0, 7) === todayLocalISO().slice(0, 7);
 }
 
 export default function BudgetPage() {

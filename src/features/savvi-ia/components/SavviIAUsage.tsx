@@ -3,10 +3,12 @@
 import { Coins } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatTokens, formatUsd, totalTokens, type UsageTotals } from "../utils/usage";
+import { toUsageTotals, type AiUsageSummary } from "../services/ai-usage.service";
 
 interface SavviIAUsageProps {
   conversation: UsageTotals;
-  lifetime: UsageTotals;
+  /** Acumulado del backend; `null` mientras carga o si no se pudo leer. */
+  summary: AiUsageSummary | null;
 }
 
 function Section({ title, usage }: { title: string; usage: UsageTotals }) {
@@ -41,9 +43,30 @@ function Section({ title, usage }: { title: string; usage: UsageTotals }) {
   );
 }
 
+/** Barra de cuánto del límite se ha usado. */
+function Limit({ label, spent, limit }: { label: string; spent: number; limit: number }) {
+  const percent = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+  return (
+    <div>
+      <div className="flex justify-between gap-3 text-[11px]">
+        <span className="text-slate-500">{label}</span>
+        <span className="tabular-nums text-slate-700">
+          {formatUsd(spent)} de {formatUsd(limit)}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${percent >= 90 ? "bg-red-400" : percent >= 70 ? "bg-amber-400" : "bg-emerald-400"}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Consumo de OpenAI del chat: discreto en el encabezado, detalle al tocarlo. */
-export default function SavviIAUsage({ conversation, lifetime }: SavviIAUsageProps) {
-  if (lifetime.calls === 0) return null;
+export default function SavviIAUsage({ conversation, summary }: SavviIAUsageProps) {
+  if (conversation.calls === 0 && !summary?.lifetime.calls) return null;
 
   return (
     <Popover>
@@ -61,11 +84,21 @@ export default function SavviIAUsage({ conversation, lifetime }: SavviIAUsagePro
       <PopoverContent align="end" className="w-64 rounded-xl border-slate-200 bg-white p-4 shadow-lg">
         <div className="space-y-4">
           <Section title="Esta conversación" usage={conversation} />
-          <div className="border-t border-slate-100" />
-          <Section title="Total acumulado" usage={lifetime} />
+          {summary && (
+            <>
+              <div className="border-t border-slate-100" />
+              <Section title="Este mes" usage={toUsageTotals(summary.month, summary.model)} />
+              <div className="space-y-2">
+                <Limit label="Hoy" spent={summary.quota.spentTodayUsd} limit={summary.quota.dailyLimitUsd} />
+                <Limit label="Este mes" spent={summary.quota.spentMonthUsd} limit={summary.quota.monthlyLimitUsd} />
+              </div>
+              <div className="border-t border-slate-100" />
+              <Section title="Total acumulado" usage={toUsageTotals(summary.lifetime, summary.model)} />
+            </>
+          )}
           <p className="border-t border-slate-100 pt-3 text-[10px] leading-relaxed text-slate-400">
-            Estimación con precios públicos de OpenAI{lifetime.model ? ` para ${lifetime.model}` : ""}. Solo cuenta el chat de
-            Savvi IA en este navegador; la factura de OpenAI es la cifra real.
+            Estimación con precios públicos de OpenAI{summary?.model ? ` para ${summary.model}` : ""}. Incluye todo tu uso
+            de Savvi IA (chat, voz y registro con IA) en cualquier dispositivo; la factura de OpenAI es la cifra real.
           </p>
         </div>
       </PopoverContent>

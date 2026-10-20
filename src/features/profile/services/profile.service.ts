@@ -2,11 +2,15 @@ import type { User } from "@/features/auth/types/auth.type";
 import type { ApiError } from "@/types/api-error.type";
 import { getBearerAuthHeaders, getJsonAuthHeaders } from "@/lib/api-auth";
 import type { CodeSentResponse } from "@/features/auth/types/auth.type";
+import type { AuthResponse } from "@/features/auth/types/auth.type";
 import type {
   ChangePasswordDto,
+  ConfirmEmailChangeDto,
   ConfirmTwoFactorDto,
   DisableTwoFactorDto,
   ProfileSummary,
+  RequestEmailChangeDto,
+  RotatedSession,
   TwoFactorStatusResponse,
   UpdateProfileDto,
 } from "../types/profile.type";
@@ -37,13 +41,33 @@ export const ProfileService = {
     return handleResponse<User>(res);
   },
 
-  changePassword: async (payload: ChangePasswordDto): Promise<{ message: string }> => {
+  changePassword: async (payload: ChangePasswordDto): Promise<{ message: string } & RotatedSession> => {
     const res = await fetch(`${API_BASE}/password`, {
       method: "PATCH",
       headers: getJsonAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    return handleResponse<{ message: string }>(res);
+    return handleResponse<{ message: string } & RotatedSession>(res);
+  },
+
+  /** Valida la contraseña y envía un código al email nuevo. */
+  requestEmailChange: async (payload: RequestEmailChangeDto): Promise<CodeSentResponse> => {
+    const res = await fetch(`${API_BASE}/email`, {
+      method: "POST",
+      headers: getJsonAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<CodeSentResponse>(res);
+  },
+
+  /** Aplica el email nuevo; devuelve una sesión nueva (las demás quedan cerradas). */
+  confirmEmailChange: async (payload: ConfirmEmailChangeDto): Promise<AuthResponse> => {
+    const res = await fetch(`${API_BASE}/email/confirm`, {
+      method: "POST",
+      headers: getJsonAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<AuthResponse>(res);
   },
 
   getSummary: async (): Promise<ProfileSummary> => {

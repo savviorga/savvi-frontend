@@ -105,7 +105,7 @@ async function transactionsTool(data: AdvisorData, catalog: AdvisorCatalog, args
       tipo: t.type,
       monto: round(t.amount),
       categoria: categoryName.get(t.categoryId) ?? t.category?.name ?? t.categoryId,
-      cuenta: accountName.get(t.account) ?? t.account,
+      cuenta: (t.account ? accountName.get(t.account) : null) ?? t.legacyAccount ?? null,
       descripcion: t.description ?? null,
     })),
     nota: list.length > limite ? `Se listan las ${limite} más recientes de ${list.length}.` : undefined,

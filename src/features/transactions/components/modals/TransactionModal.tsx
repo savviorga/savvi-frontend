@@ -210,7 +210,7 @@ export default function TransactionModal({
         type: editData.type,
         amount: editData.amount,
         category: editData.categoryId ?? "",
-        account: editData.account,
+        account: editData.account ?? "",
         description: editData.description ?? "",
       });
       return;

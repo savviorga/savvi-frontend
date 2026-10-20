@@ -82,9 +82,9 @@ export default function ViewModal({
       ? description.match(/transfer_template_id:([a-zA-Z0-9-]+)/)?.[1] ?? null
       : null;
 
-  const accountId = data.account as string | undefined;
+  const accountId = data.account ?? undefined;
   const accountName =
-    accounts?.find((a) => a.id === accountId)?.name ?? accountId ?? "-";
+    accounts?.find((a) => a.id === accountId)?.name ?? data.legacyAccount ?? "-";
 
   return (
     <>

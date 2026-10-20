@@ -1,37 +1,59 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, Mail, RotateCcw, User } from "lucide-react";
+import { Check, KeyRound, Loader2, Mail, RotateCcw, User } from "lucide-react";
+import toast from "react-hot-toast";
+import { useCooldown } from "@/features/auth/hooks/useCooldown";
+import type { CodeSentResponse } from "@/features/auth/types/auth.type";
 import { cn } from "@/lib/utils";
 import type { User as AuthUser } from "@/features/auth/types/auth.type";
 import type { MutationResult } from "../hooks/useProfile";
 import type { UpdateProfileDto } from "../types/profile.type";
 import ProfileField from "./ProfileField";
+import EmailChangeModal from "./EmailChangeModal";
+
+/** Segundos antes de poder reenviar el código (el backend responde 429 antes). */
+const RESEND_COOLDOWN_MS = 60_000;
 
 interface ProfileEditFormProps {
   user: AuthUser;
   onSave: (payload: UpdateProfileDto) => Promise<MutationResult<AuthUser>>;
+  onRequestEmailChange: (newEmail: string, currentPassword: string) => Promise<MutationResult<CodeSentResponse>>;
+  onConfirmEmailChange: (code: string) => Promise<MutationResult<string>>;
 }
 
-type FormState = { name: string; email: string };
+type FormState = { name: string; email: string; password: string };
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
-function validate(form: FormState): FormErrors {
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+function validate(form: FormState, emailChanged: boolean): FormErrors {
   const errors: FormErrors = {};
   if (form.name.trim().length < 2) errors.name = "Ingresa tu nombre completo.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Ingresa un correo válido.";
+  if (emailChanged && !form.password) errors.password = "Ingresa tu contraseña actual para cambiar el email.";
   return errors;
 }
 
-export default function ProfileEditForm({ user, onSave }: ProfileEditFormProps) {
-  const [base, setBase] = useState<FormState>({ name: user.name, email: user.email });
+export default function ProfileEditForm({
+  user,
+  onSave,
+  onRequestEmailChange,
+  onConfirmEmailChange,
+}: ProfileEditFormProps) {
+  const [base, setBase] = useState<FormState>({ name: user.name, email: user.email, password: "" });
   const [form, setForm] = useState<FormState>(base);
+  /** Email nuevo esperando el código (abre el modal de confirmación). */
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const { secondsLeft, start: startCooldown } = useCooldown();
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const dirty = form.name.trim() !== base.name || form.email.trim() !== base.email;
+  const emailChanged = normalizeEmail(form.email) !== normalizeEmail(base.email);
+  const dirty = form.name.trim() !== base.name || emailChanged;
 
   const set = (key: keyof FormState) => (value: string) => {
     setSaved(false);
@@ -40,33 +62,62 @@ export default function ProfileEditForm({ user, onSave }: ProfileEditFormProps) 
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const nextErrors = validate(form);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
-    // Solo lo que cambió
-    const payload: UpdateProfileDto = {};
-    if (form.name.trim() !== base.name) payload.name = form.name.trim();
-    if (form.email.trim() !== base.email) payload.email = form.email.trim();
-
-    setSaving(true);
-    const result = await onSave(payload);
-    setSaving(false);
-
+  const requestEmailCode = async (): Promise<boolean> => {
+    const result = await onRequestEmailChange(normalizeEmail(form.email), form.password);
     if (result.ok) {
-      const next = { name: result.data.name, email: result.data.email };
-      setBase(next);
-      setForm(next);
-      setSaved(true);
-      return;
+      startCooldown(RESEND_COOLDOWN_MS);
+      return true;
     }
     if (result.status === 409) {
       setErrors({ email: "Este correo ya está registrado en otra cuenta." });
+    } else if (result.status === 401) {
+      setErrors({ password: result.messages[0] ?? "La contraseña es incorrecta." });
     } else {
       setServerErrors(result.messages);
     }
+    return false;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextErrors = validate(form, emailChanged);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setSaving(true);
+    if (form.name.trim() !== base.name) {
+      const result = await onSave({ name: form.name.trim() });
+      if (!result.ok) {
+        setSaving(false);
+        setServerErrors(result.messages);
+        return;
+      }
+      setBase((prev) => ({ ...prev, name: result.data.name }));
+    }
+    // El email no cambia aquí: se confirma con un código enviado al nuevo.
+    if (emailChanged && (await requestEmailCode())) {
+      setPendingEmail(normalizeEmail(form.email));
+    } else if (!emailChanged) {
+      setSaved(true);
+    }
+    setSaving(false);
+  };
+
+  const resendEmailCode = async () => {
+    setResending(true);
+    if (await requestEmailCode()) toast.success("Te enviamos un nuevo código");
+    setResending(false);
+  };
+
+  const confirmEmailCode = async (code: string) => {
+    const result = await onConfirmEmailChange(code);
+    if (result.ok) {
+      const next = { name: form.name.trim(), email: result.data, password: "" };
+      setBase(next);
+      setForm(next);
+      setSaved(true);
+    }
+    return result;
   };
 
   return (
@@ -77,7 +128,9 @@ export default function ProfileEditForm({ user, onSave }: ProfileEditFormProps) 
     >
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <h3 className="text-base font-semibold text-[#0B1829]">Información personal</h3>
-        <p className="text-xs text-gray-500">Así te verás en Savvi. Seguirás con la sesión abierta después de guardar.</p>
+        <p className="text-xs text-gray-500">
+          Así te verás en Savvi. Cambiar el email requiere tu contraseña y un código enviado al correo nuevo.
+        </p>
       </div>
 
       <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
@@ -100,6 +153,23 @@ export default function ProfileEditForm({ user, onSave }: ProfileEditFormProps) 
           error={errors.email}
           autoComplete="email"
         />
+        {emailChanged && (
+          <div className="savvi-msg-in sm:col-span-2">
+            <ProfileField
+              id="current-password"
+              label="Contraseña actual (para cambiar el email)"
+              icon={KeyRound}
+              type="password"
+              value={form.password}
+              onChange={set("password")}
+              error={errors.password}
+              autoComplete="current-password"
+            />
+            <p className="mt-1.5 text-xs text-gray-500">
+              Te enviaremos un código al nuevo correo para confirmar el cambio.
+            </p>
+          </div>
+        )}
         {serverErrors.length > 0 && (
           <ul className="savvi-msg-in space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:col-span-2">
             {serverErrors.map((msg) => (
@@ -147,6 +217,16 @@ export default function ProfileEditForm({ user, onSave }: ProfileEditFormProps) 
           </button>
         </div>
       </div>
+
+      <EmailChangeModal
+        open={pendingEmail !== null}
+        newEmail={pendingEmail ?? ""}
+        onClose={() => setPendingEmail(null)}
+        onConfirm={confirmEmailCode}
+        resendSecondsLeft={secondsLeft}
+        resending={resending}
+        onResend={() => void resendEmailCode()}
+      />
     </form>
   );
 }

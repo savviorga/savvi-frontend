@@ -45,6 +45,8 @@ export default function ProfilePage() {
     reload,
     update,
     changePassword,
+    requestEmailChange,
+    confirmEmailChange,
     requestTwoFactorEnable,
     confirmTwoFactorEnable,
     disableTwoFactor,
@@ -107,7 +109,14 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {tab === "edit" && <ProfileEditForm user={user} onSave={update} />}
+        {tab === "edit" && (
+          <ProfileEditForm
+            user={user}
+            onSave={update}
+            onRequestEmailChange={requestEmailChange}
+            onConfirmEmailChange={confirmEmailChange}
+          />
+        )}
 
         {tab === "security" && (
           <div className="space-y-5">

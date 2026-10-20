@@ -89,6 +89,11 @@ type AuthContextValue = {
   getToken: () => string | null;
   /** Reemplaza el usuario en memoria y en storage (p. ej. tras `PATCH /profile`). */
   updateUser: (user: User) => void;
+  /**
+   * Guarda una sesión nueva que devolvió el backend tras un cambio de
+   * seguridad (contraseña, 2FA, email): las demás sesiones quedan cerradas.
+   */
+  replaceSession: (data: AuthResponse) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -254,6 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     getToken,
     updateUser,
+    replaceSession: startSession,
   };
 
   return (

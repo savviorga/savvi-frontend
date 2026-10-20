@@ -5,14 +5,28 @@ import { ArrowUp, Loader2, Mic, Paperclip } from "lucide-react";
 import { useS3Upload } from "@/hooks/useS3Upload";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { AiRegisterJobResponse, AiRegisterService } from "../services/ai-register.service";
+import { AiTransactionService } from "@/features/transactions/services/ai-transaction.service";
+import { getErrorMessages, isApiError } from "@/types/api-error.type";
+import { fileMimeType } from "@/lib/document-constraints";
 import SavviIAVoiceBar from "./SavviIAVoiceBar";
 
 /** Límite de una nota de voz; al llegar se envía sola. */
 const MAX_VOICE_SECONDS = 120;
 
+export interface SendMessageOptions {
+  /** `false`: se agrega al chat sin pedir respuesta al asesor. */
+  reply?: boolean;
+  /** El texto viene de una nota de voz transcrita. */
+  viaVoice?: boolean;
+}
+
+/** Mensaje legible de un error del API o de red. */
+const errorMessage = (error: unknown, fallback: string) =>
+  isApiError(error) ? getErrorMessages(error).join(" ") : error instanceof Error ? error.message : fallback;
+
 interface SavviIAComposerProps {
   initialValue?: string;
-  onSendMessage: (message: string, options?: { reply?: boolean }) => void;
+  onSendMessage: (message: string, options?: SendMessageOptions) => void;
   onJobCreated: (job: AiRegisterJobResponse, attachmentName: string) => void;
   disabled?: boolean;
 }
@@ -38,7 +52,7 @@ export default function SavviIAComposer({
       const [uploadResult] = await uploadFiles([file], "savvi-ia");
       const job = await AiRegisterService.createJob({
         ...uploadResult,
-        mimeType: file.type,
+        mimeType: fileMimeType(file),
         userText: message.trim() || undefined,
       });
       onJobCreated(job, file.name);
@@ -50,6 +64,22 @@ export default function SavviIAComposer({
     } catch (error) {
       const fallback = "No se pudo procesar el archivo.";
       setAttachmentError(error instanceof Error ? error.message : fallback);
+    }
+  };
+
+  /** La nota de voz se transcribe y llega al asesor como un mensaje normal. */
+  const sendVoiceNote = async (audio: Blob, fileName: string) => {
+    setAttachmentError(null);
+    setSendingVoice(true);
+    try {
+      const text = (await AiTransactionService.transcribe(audio, fileName)).trim();
+      if (!text) {
+        setAttachmentError("No entendimos la nota de voz. Intenta grabarla de nuevo.");
+        return;
+      }
+      onSendMessage(text, { viaVoice: true });
+    } catch (error) {
+      setAttachmentError(errorMessage(error, "No pudimos transcribir tu nota de voz."));
     } finally {
       setSendingVoice(false);
     }
@@ -58,14 +88,11 @@ export default function SavviIAComposer({
   const recorder = useAudioRecorder({
     maxSeconds: MAX_VOICE_SECONDS,
     onLevel: (level) => levelSinkRef.current?.(level),
-    onRecorded: (audio, fileName) => {
-      setSendingVoice(true);
-      void uploadAndCreateJob(new File([audio], fileName, { type: audio.type || "audio/webm" }));
-    },
+    onRecorded: (audio, fileName) => void sendVoiceNote(audio, fileName),
   });
 
   const isRecording = recorder.state === "recording";
-  const isBusy = disabled || uploading;
+  const isBusy = disabled || uploading || sendingVoice;
   const hasText = message.trim().length > 0;
   const error = attachmentError ?? recorder.error;
 
@@ -159,8 +186,8 @@ export default function SavviIAComposer({
                 autoResize(event.target);
               }}
               onKeyDown={onKeyDown}
-              disabled={uploading}
-              placeholder={sendingVoice ? "Enviando tu nota de voz…" : "Escribe sobre tus finanzas..."}
+              disabled={uploading || sendingVoice}
+              placeholder={sendingVoice ? "Transcribiendo tu nota de voz…" : "Escribe sobre tus finanzas..."}
               className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 md:text-[15px]"
             />
 
@@ -225,6 +252,11 @@ export default function SavviIAComposer({
           <p key={error} className="savvi-msg-in text-red-500">
             {error}
           </p>
+        ) : sendingVoice ? (
+          <p className="savvi-msg-in flex items-center gap-1.5 text-emerald-600">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            Transcribiendo tu nota de voz…
+          </p>
         ) : uploading ? (
           <p className="savvi-msg-in flex items-center gap-1.5 text-emerald-600">
             <span className="flex items-center gap-0.5" aria-hidden>
@@ -236,7 +268,7 @@ export default function SavviIAComposer({
                 />
               ))}
             </span>
-            {sendingVoice ? "Enviando tu nota de voz…" : "Subiendo archivo…"}
+            Subiendo archivo…
           </p>
         ) : isRecording ? (
           <p className="savvi-msg-in text-slate-500">

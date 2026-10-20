@@ -43,13 +43,34 @@ export const DOCUMENT_ACCEPT: Record<string, string[]> = {
   "audio/mp4": [".m4a"],
 };
 
+/**
+ * Quita los parámetros del MIME (`audio/webm;codecs=opus` → `audio/webm`):
+ * MediaRecorder los agrega y el backend compara el tipo base.
+ */
+export function normalizeMimeType(type: string | null | undefined): string {
+  return (type ?? "").split(";")[0].trim().toLowerCase();
+}
+
+const EXTENSION_TYPES: Record<string, string> = Object.fromEntries(
+  Object.entries(DOCUMENT_ACCEPT).flatMap(([type, extensions]) => extensions.map((ext) => [ext, type])),
+);
+
+/** Tipo base del archivo; si el navegador no lo dio (pasa en Android), se deduce de la extensión. */
+export function fileMimeType(file: File): string {
+  const type = normalizeMimeType(file.type);
+  if (type) return type;
+  const extension = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+  return EXTENSION_TYPES[extension] ?? "";
+}
+
 /** `null` si el archivo es válido; si no, el mensaje para el usuario. */
 export function validateDocumentFile(file: File): string | null {
   if (file.size > MAX_DOCUMENT_SIZE) {
     return `${file.name} excede el tamaño máximo de ${MAX_DOCUMENT_SIZE / 1024 / 1024} MB`;
   }
-  if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
-    return `${file.name}: tipo de archivo no permitido (${file.type || "desconocido"})`;
+  const type = fileMimeType(file);
+  if (!ALLOWED_DOCUMENT_TYPES.includes(type)) {
+    return `${file.name}: tipo de archivo no permitido (${type || "desconocido"})`;
   }
   return null;
 }

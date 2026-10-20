@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import SavviIAAvatar from "./SavviIAAvatar";
-import SavviIAComposer from "./SavviIAComposer";
+import SavviIAComposer, { type SendMessageOptions } from "./SavviIAComposer";
 import SavviIAConversation from "./SavviIAConversation";
 import SavviIAUsage from "./SavviIAUsage";
 import { ChatMessage, ProposalHandlers } from "./SavviIAMessageBubble";
@@ -215,8 +215,8 @@ export default function SavviIAChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSendMessage = async (text: string, options?: { reply?: boolean }) => {
-    appendMessage({ role: "user", text });
+  const handleSendMessage = async (text: string, options?: SendMessageOptions) => {
+    appendMessage({ role: "user", text, viaVoice: options?.viaVoice });
     if (options?.reply === false) return;
     await requestReply();
   };

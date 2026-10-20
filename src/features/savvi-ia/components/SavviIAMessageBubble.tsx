@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Loader2, Paperclip, Search, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, Mic, Paperclip, Search, XCircle } from "lucide-react";
 import SavviIAAvatar from "./SavviIAAvatar";
 import SavviIAProposalCard from "./SavviIAProposalCard";
 import SavviIAChart from "./SavviIAChart";
@@ -34,6 +34,8 @@ export interface ChatMessage {
   suggestions?: string[];
   /** Se envía al modelo pero no se muestra (p. ej. resultados de crear). */
   hidden?: boolean;
+  /** Mensaje del usuario dictado por nota de voz (el texto es la transcripción). */
+  viaVoice?: boolean;
 }
 
 export interface ProposalHandlers {
@@ -136,9 +138,17 @@ export default function SavviIAMessageBubble({
               <SavviIAMarkdown>{visible}</SavviIAMarkdown>
             </div>
           ) : (
-            <p className={`whitespace-pre-line text-sm leading-relaxed md:text-[15px] ${done ? "" : "savvi-caret"}`}>
-              {visible}
-            </p>
+            <>
+              {message.viaVoice && (
+                <span className="mb-1 inline-flex items-center gap-1 text-[11px] font-medium text-white/80">
+                  <Mic className="h-3 w-3" aria-hidden />
+                  Nota de voz
+                </span>
+              )}
+              <p className={`whitespace-pre-line text-sm leading-relaxed md:text-[15px] ${done ? "" : "savvi-caret"}`}>
+                {visible}
+              </p>
+            </>
           )}
 
           {(message.attachmentName || status) && (

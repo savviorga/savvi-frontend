@@ -58,6 +58,20 @@ function clearStored(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+/** Datos de Savvi IA guardados en el navegador (conversación con datos financieros). */
+const SAVVI_IA_KEY_PREFIX = "savvi_ia_";
+
+/** Al cerrar sesión no queda nada del usuario en este navegador. */
+function clearUserData(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys = Object.keys(localStorage).filter((key) => key.startsWith(SAVVI_IA_KEY_PREFIX));
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    /* sin acceso a localStorage */
+  }
+}
+
 function saveStored(auth: StoredAuth): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
@@ -233,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearStored();
+    clearUserData();
     setUser(null);
     setAccessToken(null);
     router.replace("/");

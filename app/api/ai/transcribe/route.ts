@@ -6,6 +6,8 @@ import {
   openAiForm,
 } from "@/lib/openai";
 import { requireSession } from "@/lib/ai-session";
+import { assertAiQuota, recordAiUsage } from "@/lib/ai/quota";
+import { transcriptionUsage, type TranscriptionUsage } from "@/lib/ai/pricing";
 
 export const runtime = "nodejs";
 
@@ -14,6 +16,7 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
 interface TranscriptionResponse {
   text?: string;
+  usage?: TranscriptionUsage;
 }
 
 async function transcribe(
@@ -37,7 +40,7 @@ async function transcribe(
 /** Audio → texto. Recibe multipart con el campo `file`. */
 export async function POST(request: Request): Promise<Response> {
   try {
-    await requireSession(request);
+    const session = await requireSession(request);
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -52,7 +55,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    await assertAiQuota(session);
+
     let data: TranscriptionResponse;
+    let model = AUDIO_MODEL;
     try {
       data = await transcribe(file, AUDIO_MODEL);
     } catch (error) {
@@ -65,8 +71,10 @@ export async function POST(request: Request): Promise<Response> {
 
       if (!modelUnavailable) throw error;
       console.warn(`[ai] ${AUDIO_MODEL} no disponible, usando ${AUDIO_MODEL_FALLBACK}`);
+      model = AUDIO_MODEL_FALLBACK;
       data = await transcribe(file, AUDIO_MODEL_FALLBACK);
     }
+    await recordAiUsage(session, "transcribe", transcriptionUsage(model, data.usage));
 
     const text = data.text?.trim() ?? "";
     if (!text) {

@@ -4,6 +4,8 @@
  * **Solo servidor**: se usa desde `app/api/**`.
  */
 
+import type { OpenAIUsage } from "./pricing";
+
 export const TRANSACTION_TYPES = ["ingreso", "egreso", "transferencia"] as const;
 
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
@@ -37,6 +39,8 @@ export interface ModelOutput extends DetectedTransaction {
 }
 
 export interface ChatCompletion {
+  model?: string;
+  usage?: OpenAIUsage;
   choices?: { message?: { content?: string } }[];
 }
 

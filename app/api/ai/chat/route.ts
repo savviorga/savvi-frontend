@@ -1,5 +1,6 @@
 import { CHAT_MODEL, OpenAIError, errorResponse, openAiJson } from "@/lib/openai";
-import { requireSession } from "@/lib/ai-session";
+import { requireSession, type AiSession } from "@/lib/ai-session";
+import { assertAiQuota, recordAiUsage } from "@/lib/ai/quota";
 import { AdvisorData, loadSnapshot, type AdvisorSnapshot } from "@/lib/ai/advisor/snapshot";
 import { ADVISOR_PROMPT, kickoffInstruction } from "@/lib/ai/advisor/prompt";
 import {
@@ -26,6 +27,8 @@ const MAX_ASSISTANT_HISTORY_LENGTH = 15_000;
 const MAX_USER_MESSAGE_LENGTH = 30_000;
 /** Solo se envían los últimos mensajes: acota el costo por petición. */
 const MAX_HISTORY = 30;
+/** Tope de texto total del historial por petición (los mensajes más viejos se descartan). */
+const MAX_TOTAL_CHARS = 120_000;
 /** Rondas de herramientas antes de obligar al modelo a responder. */
 const MAX_ROUNDS = 5;
 /** Alcanza para proponer una tabla de 100 transacciones en una sola respuesta. */
@@ -58,7 +61,7 @@ type ReplyEvent = Omit<Extract<AdvisorEvent, { type: "reply" }>, "usage">;
 
 function readMessages(raw: unknown): ChatTurn[] {
   if (!Array.isArray(raw)) return [];
-  return raw
+  const turns = raw
     .filter(
       (item): item is ChatTurn =>
         typeof item === "object" &&
@@ -72,6 +75,15 @@ function readMessages(raw: unknown): ChatTurn[] {
       role,
       content: content.trim().slice(0, role === "user" ? MAX_USER_MESSAGE_LENGTH : MAX_ASSISTANT_HISTORY_LENGTH),
     }));
+
+  // Del más nuevo al más viejo hasta llenar el tope de texto.
+  let budget = MAX_TOTAL_CHARS;
+  let start = turns.length;
+  while (start > 0 && budget - turns[start - 1].content.length >= 0) {
+    start -= 1;
+    budget -= turns[start].content.length;
+  }
+  return turns.slice(start);
 }
 
 const isReadTool = (name: string): name is ReadToolName => (READ_TOOL_NAMES as readonly string[]).includes(name);
@@ -140,6 +152,7 @@ async function runAdvisor(
   data: AdvisorData,
   emit: (event: AdvisorEvent) => void,
   usage: AdvisorUsage,
+  signal: AbortSignal,
 ): Promise<ReplyEvent> {
   const userText = messages
     .filter((m) => m.role === "user")
@@ -152,6 +165,8 @@ async function runAdvisor(
   ];
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    // El usuario cerró el chat: no se siguen pagando rondas.
+    if (signal.aborted) throw new OpenAIError("La conversación se canceló.", 499);
     const lastRound = round === MAX_ROUNDS - 1;
     const completion = await openAiJson<{
       model?: string;
@@ -165,7 +180,7 @@ async function runAdvisor(
       tool_choice: lastRound ? "none" : "auto",
       response_format: REPLY_FORMAT,
       messages: conversation,
-    });
+    }, signal);
 
     addUsage(usage, completion.model ?? CHAT_MODEL, completion.usage);
 
@@ -234,16 +249,18 @@ export async function POST(request: Request): Promise<Response> {
   let messages: ChatTurn[];
   let snapshot: AdvisorSnapshot;
   let data: AdvisorData;
+  let session: AiSession;
 
   // Lo que falle antes de empezar a transmitir responde con su código HTTP.
   try {
-    const { authorization } = await requireSession(request);
+    session = await requireSession(request);
+    await assertAiQuota(session);
     const body = (await request.json().catch(() => ({}))) as { messages?: unknown };
     messages = readMessages(body.messages);
     if (messages.length > 0 && messages[messages.length - 1].role !== "user") {
       throw new OpenAIError("Escribe un mensaje para Savvi IA.", 400);
     }
-    data = new AdvisorData(authorization);
+    data = new AdvisorData(session.authorization);
     snapshot = await loadSnapshot(data);
   } catch (error) {
     return errorResponse(error);
@@ -252,10 +269,16 @@ export async function POST(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const emit = (event: AdvisorEvent) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      const emit = (event: AdvisorEvent) => {
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          // El cliente ya se desconectó.
+        }
+      };
       const usage = emptyUsage(CHAT_MODEL);
       try {
-        const reply = await runAdvisor(messages, snapshot, data, emit, usage);
+        const reply = await runAdvisor(messages, snapshot, data, emit, usage, request.signal);
         emit({ ...reply, usage });
       } catch (error) {
         console.error("[ai] Savvi IA:", error);
@@ -267,7 +290,13 @@ export async function POST(request: Request): Promise<Response> {
           usage: usage.calls > 0 ? usage : undefined,
         });
       } finally {
-        controller.close();
+        // Las rondas que sí se hicieron cuentan para la cuota del usuario.
+        await recordAiUsage(session, "chat", usage);
+        try {
+          controller.close();
+        } catch {
+          /* ya estaba cerrado */
+        }
       }
     },
   });

@@ -63,6 +63,7 @@ async function toOpenAIError(res: Response): Promise<OpenAIError> {
 export async function openAiJson<T>(
   path: string,
   body: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
     method: "POST",
@@ -71,6 +72,7 @@ export async function openAiJson<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) throw await toOpenAIError(res);

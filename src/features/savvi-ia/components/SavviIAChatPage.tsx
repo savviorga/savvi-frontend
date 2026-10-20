@@ -18,14 +18,8 @@ import {
   toProposal,
 } from "../utils/proposals";
 import { describeBlockForModel } from "../utils/blocks";
-import {
-  clearChat,
-  describeAbsence,
-  loadChat,
-  loadLifetimeUsage,
-  saveChat,
-  saveLifetimeUsage,
-} from "../utils/chat-storage";
+import { clearChat, clearLegacyUsage, describeAbsence, loadChat, saveChat } from "../utils/chat-storage";
+import { AiUsageService, type AiUsageSummary } from "../services/ai-usage.service";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import type { ApiError } from "@/types/api-error.type";
 
@@ -78,7 +72,8 @@ export default function SavviIAChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => restored?.messages ?? []);
   // Consumo del modelo: de esta conversación y acumulado del usuario.
   const [usage, setUsage] = useState<UsageTotals>(() => restored?.usage ?? EMPTY_USAGE);
-  const [lifetimeUsage, setLifetimeUsage] = useState<UsageTotals>(() => loadLifetimeUsage(userId));
+  // Acumulado del backend (mes, histórico y límites); se refresca tras cada respuesta.
+  const [usageSummary, setUsageSummary] = useState<AiUsageSummary | null>(null);
   const usageRef = useRef(usage);
   const [isTyping, setIsTyping] = useState(false);
   const [isProcessingJob, setIsProcessingJob] = useState(false);
@@ -108,17 +103,21 @@ export default function SavviIAChatPage() {
     appendMessage({ role: "assistant", text, ...extras });
   };
 
+  const refreshUsageSummary = () => {
+    AiUsageService.summary()
+      .then(setUsageSummary)
+      .catch(() => {
+        /* el panel de consumo es informativo: sin backend no se muestra */
+      });
+  };
+
   /**
-   * Suma lo que costó una respuesta. Al acumulado siempre (ya se cobró); a la
-   * conversación solo si sigue siendo la actual.
+   * Suma lo que costó una respuesta a la conversación (si sigue siendo la
+   * actual). El acumulado lo registra el servidor; aquí solo se refresca.
    */
   const recordUsage = (spent: AdvisorUsage | undefined, inCurrentConversation: boolean) => {
     if (!spent || spent.calls === 0) return;
-    setLifetimeUsage((previous) => {
-      const next = addToTotals(previous, spent);
-      saveLifetimeUsage(userId, next);
-      return next;
-    });
+    refreshUsageSummary();
     if (!inCurrentConversation) return;
     usageRef.current = addToTotals(usageRef.current, spent);
     setUsage(usageRef.current);
@@ -199,6 +198,8 @@ export default function SavviIAChatPage() {
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
+    clearLegacyUsage(userId);
+    refreshUsageSummary();
 
     if (!restored) {
       void requestReply();
@@ -380,7 +381,7 @@ export default function SavviIAChatPage() {
         </div>
 
         <div className="flex items-center gap-1">
-          <SavviIAUsage conversation={usage} lifetime={lifetimeUsage} />
+          <SavviIAUsage conversation={usage} summary={usageSummary} />
           {hasConversation && (
             <button
               type="button"

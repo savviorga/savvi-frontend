@@ -100,9 +100,16 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
       }));
     case "transactions":
       return proposal.items.map((item) => ({
-        title: item.description || item.categoryName,
-        detail: join(shortDate(item.date), item.categoryName, item.accountName),
-        amount: { value: item.amount, tone: item.type === "ingreso" ? "income" : "expense" },
+        title: item.description || item.categoryName || "Transferencia",
+        detail: join(
+          shortDate(item.date),
+          item.categoryName,
+          item.toAccountName ? `${item.accountName} → ${item.toAccountName}` : item.accountName,
+        ),
+        amount: {
+          value: item.amount,
+          tone: item.type === "ingreso" ? "income" : item.type === "transferencia" ? "neutral" : "expense",
+        },
         warning: item.warning,
         attachment: item.evidence?.name,
       }));
@@ -209,6 +216,7 @@ const toTransactionDto = (t: TransactionDraft): CreateTransactionDto => ({
   amount: t.amount,
   categoryId: t.categoryId,
   account: t.accountId,
+  toAccount: t.toAccountId ?? null,
   description: t.description,
 });
 

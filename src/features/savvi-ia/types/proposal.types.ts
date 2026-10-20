@@ -50,12 +50,16 @@ export interface EvidenceRef {
 /** `POST /transactions/bulk`, por lotes */
 export interface TransactionDraft {
   date: string;
-  type: "ingreso" | "egreso";
+  type: "ingreso" | "egreso" | "transferencia";
   amount: number;
-  categoryId: string;
-  categoryName: string;
+  /** Opcional solo en transferencias (el backend usa "Transferencias"). */
+  categoryId?: string;
+  categoryName?: string;
   accountId: string;
   accountName: string;
+  /** Transferencia: cuenta destino del usuario. */
+  toAccountId?: string;
+  toAccountName?: string;
   description?: string;
   /** El monto no aparece en el texto del usuario: la tarjeta lo muestra y lo deja desmarcado */
   warning?: string;

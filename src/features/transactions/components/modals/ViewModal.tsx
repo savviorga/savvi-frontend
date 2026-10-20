@@ -85,6 +85,10 @@ export default function ViewModal({
   const accountId = data.account ?? undefined;
   const accountName =
     accounts?.find((a) => a.id === accountId)?.name ?? data.legacyAccount ?? "-";
+  // Transferencia entre cuentas propias: "Origen → Destino".
+  const toAccountName = data.toAccount
+    ? accounts?.find((a) => a.id === data.toAccount)?.name ?? "-"
+    : null;
 
   return (
     <>
@@ -119,7 +123,10 @@ export default function ViewModal({
             strong
           />
           <Info label="Categoría" value={categoryPath(data.category, "-")} />
-          <Info label="Cuenta" value={accountName} />
+          <Info
+            label={toAccountName ? "Cuentas" : "Cuenta"}
+            value={toAccountName ? `${accountName} → ${toAccountName}` : accountName}
+          />
           <Info label="Descripción" value={data.description ?? "-"} />
           <Info
             label="Plantilla recurrente"

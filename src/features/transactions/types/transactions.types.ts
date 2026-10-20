@@ -31,6 +31,8 @@ export interface Transaction {
   account: string | null;
   /** Texto de la cuenta en movimientos viejos sin cuenta enlazada (solo para mostrar). */
   legacyAccount?: string | null;
+  /** Cuenta destino de una transferencia entre cuentas propias; `null` si es a un tercero. */
+  toAccount?: string | null;
   description?: string;
   /** Solo viene en el PATCH de edición; el listado no lo incluye. */
   documents?: TransactionDocument[];
@@ -42,8 +44,11 @@ export interface CreateTransactionDto {
   date: string;
   type: TransactionType;
   amount: number;
-  categoryId: string;
+  /** Opcional en transferencias: sin ella el backend usa "Transferencias". */
+  categoryId?: string;
   account: string;
+  /** Solo transferencias: cuenta destino propia (`null` = a un tercero). */
+  toAccount?: string | null;
   description?: string;
   files?: File[];
 }

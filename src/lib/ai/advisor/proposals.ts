@@ -163,17 +163,30 @@ function transactions(
   const rows = list(args, "transacciones", problems, MAX_TRANSACTIONS);
   const known = rows.length >= VERIFY_FROM_ITEMS ? amountsIn(userText) : null;
   return rows.flatMap((item, i): TransactionDraft[] => {
-    const type = item.type === "ingreso" ? "ingreso" : "egreso";
+    const type = item.type === "ingreso" || item.type === "transferencia" ? item.type : "egreso";
+    const isTransfer = type === "transferencia";
     const amount = positive(item.amount);
     const date = isoDate(item.date);
     const category = find.category(item.categoryId);
     const account = find.account(item.accountId);
+    const toAccount = isTransfer ? find.account(item.toAccountId) : undefined;
     const label = `Transacción ${i + 1}`;
     if (!amount) return fail(`${label}: monto inválido.`);
     if (!date) return fail(`${label}: fecha inválida (usa YYYY-MM-DD).`);
-    if (!category) return fail(`${label}: categoryId no existe en el catálogo.`);
-    if (category.type !== type) return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
+    // En transferencias la categoría es opcional; si viene, debe existir.
+    if (!category && (!isTransfer || item.categoryId != null)) {
+      return fail(`${label}: categoryId no existe en el catálogo.`);
+    }
+    if (category && !isTransfer && category.type !== type) {
+      return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
+    }
     if (!account) return fail(`${label}: accountId no existe en el catálogo.`);
+    if (isTransfer && !toAccount) {
+      return fail(`${label}: toAccountId no existe en el catálogo (una transferencia va entre dos cuentas del usuario; un pago a otra persona es un egreso).`);
+    }
+    if (toAccount && toAccount.id === account.id) {
+      return fail(`${label}: la cuenta destino debe ser distinta de la de origen.`);
+    }
     const evidenceId = text(item.evidencia, 10)?.toUpperCase();
     const source = evidenceId ? evidence.get(evidenceId) : undefined;
     if (evidenceId && !source) problems.push(`${label}: la evidencia ${evidenceId} no existe; se registra sin soporte.`);
@@ -182,10 +195,12 @@ function transactions(
         date,
         type,
         amount,
-        categoryId: category.id,
-        categoryName: category.name,
+        categoryId: category?.id,
+        categoryName: category?.name,
         accountId: account.id,
         accountName: account.name,
+        toAccountId: toAccount?.id,
+        toAccountName: toAccount?.name,
         description: text(item.description, 500),
         evidence: source ? { key: source.key, name: source.name, size: source.size } : undefined,
         warning:

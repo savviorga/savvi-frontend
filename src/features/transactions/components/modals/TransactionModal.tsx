@@ -59,13 +59,21 @@ import {
 /** Si no hay un tipo recordado se arranca en gasto: es el registro más común. */
 const DEFAULT_TYPE = "egreso";
 
-type FieldKey = "type" | "amount" | "category" | "account" | "date" | "payee";
+type FieldKey =
+  | "type"
+  | "amount"
+  | "category"
+  | "account"
+  | "toAccount"
+  | "date"
+  | "payee";
 
 const FIELD_LABELS: Record<FieldKey, string> = {
   type: "tipo",
   amount: "monto",
   category: "categoría",
   account: "cuenta",
+  toAccount: "cuenta destino",
   date: "fecha",
   payee: "destinatario",
 };
@@ -147,6 +155,7 @@ export default function TransactionModal({
     amount: null as number | null,
     category: "",
     account: "",
+    toAccount: "",
     description: "",
   });
   /** Archivos nuevos: se suben a S3 al guardar y viajan como `filesToAdd`. */
@@ -211,6 +220,7 @@ export default function TransactionModal({
         amount: editData.amount,
         category: editData.categoryId ?? "",
         account: editData.account ?? "",
+        toAccount: editData.toAccount ?? "",
         description: editData.description ?? "",
       });
       return;
@@ -235,6 +245,7 @@ export default function TransactionModal({
       amount: null as number | null,
       category: defaults.category,
       account: defaults.account,
+      toAccount: "",
       description: "",
     });
   }, [editData, open, categories, accounts]);
@@ -266,6 +277,8 @@ export default function TransactionModal({
   const handleTypeChange = (v: string) => {
     setForm((f) => {
       const next = { ...f, type: v };
+      // La cuenta destino solo existe en transferencias.
+      if (v !== "transferencia") next.toAccount = "";
       if (v === "ingreso" || v === "egreso") {
         const stillValid = categories.some(
           (c) => (c.type ?? "egreso") === v && f.category === c.id,
@@ -286,6 +299,7 @@ export default function TransactionModal({
       amount: null,
       category: "",
       account: "",
+      toAccount: "",
       description: "",
     });
   };
@@ -333,9 +347,13 @@ export default function TransactionModal({
 
   // Lo obligatorio según el modo: el pago recurrente se registra hoy y usa el
   // nombre del pago como categoría, así que pide destinatario en su lugar.
+  // En transferencias la categoría es opcional ("Transferencias" por defecto).
+  const isTransfer = form.type === "transferencia";
   const requiredFields: FieldKey[] = isRecurring
     ? ["type", "amount", "account", "payee"]
-    : ["type", "amount", "category", "account", "date"];
+    : isTransfer
+      ? ["type", "amount", "account", "date"]
+      : ["type", "amount", "category", "account", "date"];
   const missing = requiredFields.filter((key) => {
     switch (key) {
       case "type":
@@ -346,6 +364,8 @@ export default function TransactionModal({
         return !form.category;
       case "account":
         return !form.account;
+      case "toAccount":
+        return false;
       case "date":
         return !form.date;
       case "payee":
@@ -496,12 +516,13 @@ export default function TransactionModal({
               return;
             }
 
-            const { category: categoryId, ...formFields } = form;
+            const { category, toAccount, ...formFields } = form;
 
             const submitResult = await onSubmit(
               {
                 ...formFields,
-                categoryId,
+                categoryId: category || undefined,
+                toAccount: isTransfer ? toAccount || null : null,
                 amount,
                 description,
                 files,
@@ -587,6 +608,7 @@ export default function TransactionModal({
               value={form.category}
               onChange={(category) => setForm((f) => ({ ...f, category }))}
               error={hasError("category")}
+              hint={isTransfer ? "(opcional)" : undefined}
             />
             </div>
           )}
@@ -595,11 +617,32 @@ export default function TransactionModal({
           <AccountChips
             accounts={accounts}
             value={form.account}
-            onChange={(account) => setForm((f) => ({ ...f, account }))}
+            onChange={(account) =>
+              setForm((f) => ({
+                ...f,
+                account,
+                // Origen y destino no pueden ser la misma cuenta.
+                toAccount: f.toAccount === account ? "" : f.toAccount,
+              }))
+            }
             title={ACCOUNT_TITLES[form.type] ?? "¿Qué cuenta?"}
             error={hasError("account")}
           />
           </div>
+
+          {isTransfer && !isRecurring && (
+            <div {...enter()}>
+            <AccountChips
+              sectionId="tx-section-toAccount"
+              accounts={accounts.filter((acc) => acc.id !== form.account)}
+              value={form.toAccount}
+              onChange={(toAccount) => setForm((f) => ({ ...f, toAccount }))}
+              title="¿A qué cuenta tuya?"
+              hint="(vacío si es a otra persona)"
+              clearable
+            />
+            </div>
+          )}
 
           {!isRecurring && (
             <div {...enter()}>

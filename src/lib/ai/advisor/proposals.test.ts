@@ -5,7 +5,10 @@ import type { ChatAttachment, TransactionDraft } from "@/features/savvi-ia/types
 
 const catalog: AdvisorCatalog = {
   categories: [{ id: "cat-mercado", name: "Mercado", type: "egreso", parentId: null, isGroup: false }],
-  accounts: [{ id: "acc-debito", name: "Bancolombia Débito", isCredit: false, isActive: true }],
+  accounts: [
+    { id: "acc-debito", name: "Bancolombia Débito", isCredit: false, isActive: true },
+    { id: "acc-nequi", name: "Nequi", isCredit: false, isActive: true },
+  ],
   debts: [],
 };
 
@@ -70,3 +73,35 @@ describe("checkProposal – evidencias", () => {
     expect(warnings).toEqual([false, false, true]);
   });
 });
+
+describe("checkProposal – transferencias", () => {
+  const transfer = (extra: Record<string, unknown>) =>
+    row({ type: "transferencia", categoryId: null, toAccountId: "acc-nequi", description: "A Nequi", ...extra });
+
+  it("entre dos cuentas propias, sin categoría", () => {
+    const check = checkProposal("proponer_transacciones", { mensaje: "", transacciones: [transfer({})] }, catalog, [], "pasé 45900 a nequi");
+    const item = check.proposal?.items[0] as TransactionDraft;
+    expect(check.problems).toEqual([]);
+    expect(item).toMatchObject({ type: "transferencia", accountId: "acc-debito", toAccountId: "acc-nequi", toAccountName: "Nequi" });
+    expect(item.categoryId).toBeUndefined();
+  });
+
+  it("rechaza destino inexistente o igual al origen", () => {
+    const check = checkProposal(
+      "proponer_transacciones",
+      { mensaje: "", transacciones: [transfer({ toAccountId: null }), transfer({ toAccountId: "acc-debito" })] },
+      catalog,
+      [],
+      "",
+    );
+    expect(check.proposal).toBeNull();
+    expect(check.problems).toHaveLength(2);
+    expect(check.problems[1]).toMatch(/distinta/);
+  });
+
+  it("un gasto sigue necesitando categoría", () => {
+    const check = checkProposal("proponer_transacciones", { mensaje: "", transacciones: [row({ categoryId: null })] }, catalog, [], "");
+    expect(check.problems[0]).toMatch(/categoryId/);
+  });
+});
+

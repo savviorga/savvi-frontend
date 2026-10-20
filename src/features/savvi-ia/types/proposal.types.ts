@@ -26,6 +26,27 @@ export interface AccountDraft {
   dueDay?: number;
 }
 
+/** Evidencia (foto, captura o PDF) que el usuario adjuntó en el chat; vive en S3. */
+export interface ChatAttachment {
+  /** Key de S3 (`users/<userId>/savvi-ia/...`) */
+  key: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  /**
+   * Lo que Savvi IA leyó del archivo (JSON compacto). Se guarda en el mensaje y
+   * en los turnos siguientes viaja este texto en vez del archivo.
+   */
+  analysis?: string;
+}
+
+/** Archivo que queda como soporte de la transacción al confirmar. */
+export interface EvidenceRef {
+  key: string;
+  name: string;
+  size: number;
+}
+
 /** `POST /transactions/bulk`, por lotes */
 export interface TransactionDraft {
   date: string;
@@ -38,6 +59,8 @@ export interface TransactionDraft {
   description?: string;
   /** El monto no aparece en el texto del usuario: la tarjeta lo muestra y lo deja desmarcado */
   warning?: string;
+  /** Evidencia de la que salió el movimiento: se adjunta a la transacción al crearla */
+  evidence?: EvidenceRef;
 }
 
 /** `POST /budgets` (crea o actualiza el de esa categoría y mes) */
@@ -102,7 +125,8 @@ export type ProposalData =
 
 export type ProposalKind = ProposalData["kind"];
 
-export type ProposalItemResult = { ok: true } | { ok: false; error: string };
+/** `note`: quedó creado pero con un detalle (p. ej. no se pudo adjuntar la evidencia). */
+export type ProposalItemResult = { ok: true; note?: string } | { ok: false; error: string };
 
 export type ProposalStatus = "pending" | "creating" | "done" | "dismissed";
 
@@ -224,6 +248,8 @@ export interface AdvisorUsage {
 /** Eventos NDJSON de `POST /api/ai/chat`. */
 export type AdvisorEvent =
   | { type: "step"; step: AdvisorStep }
+  /** Lo que se leyó de cada evidencia nueva: el cliente lo guarda en el mensaje. */
+  | { type: "evidence"; items: { key: string; analysis: string }[] }
   | {
       type: "reply";
       /** 1 a 3 mensajes cortos, como burbujas separadas */

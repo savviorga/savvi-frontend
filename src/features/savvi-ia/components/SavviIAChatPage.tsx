@@ -7,8 +7,7 @@ import SavviIAComposer, { type SendMessageOptions } from "./SavviIAComposer";
 import SavviIAConversation from "./SavviIAConversation";
 import SavviIAUsage from "./SavviIAUsage";
 import { ChatMessage, ProposalHandlers } from "./SavviIAMessageBubble";
-import { AiRegisterJobResponse, AiRegisterService } from "../services/ai-register.service";
-import { AiChatService, ChatTurn } from "../services/ai-chat.service";
+import { AiChatService, ChatTurn, type EvidenceAnalysis } from "../services/ai-chat.service";
 import type { AdvisorStep, AdvisorUsage, Proposal } from "../types/proposal.types";
 import { EMPTY_USAGE, addToTotals, type UsageTotals } from "../utils/usage";
 import {
@@ -46,8 +45,8 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 /**
- * Lo que ve el modelo: conversación + resumen de cada propuesta. Los avisos
- * del registro por archivo y los errores locales no van.
+ * Lo que ve el modelo: conversación + resumen de cada propuesta + evidencias
+ * (con lo que ya se leyó de ellas). Los avisos y errores locales no van.
  */
 const toChatHistory = (messages: ChatMessage[]): ChatTurn[] =>
   messages
@@ -62,6 +61,7 @@ const toChatHistory = (messages: ChatMessage[]): ChatTurn[] =>
       ]
         .filter(Boolean)
         .join("\n\n"),
+      attachments: message.role === "user" && message.attachments?.length ? message.attachments : undefined,
     }));
 
 export default function SavviIAChatPage() {
@@ -75,8 +75,6 @@ export default function SavviIAChatPage() {
   // Acumulado del backend (mes, histórico y límites); se refresca tras cada respuesta.
   const [usageSummary, setUsageSummary] = useState<AiUsageSummary | null>(null);
   const usageRef = useRef(usage);
-  const [isTyping, setIsTyping] = useState(false);
-  const [isProcessingJob, setIsProcessingJob] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activity, setActivity] = useState<string | null>(null);
@@ -134,6 +132,23 @@ export default function SavviIAChatPage() {
     );
   };
 
+  /** Guarda en los mensajes lo que se leyó de cada evidencia (no se vuelve a leer el archivo). */
+  const saveEvidenceAnalysis = (items: EvidenceAnalysis[]) => {
+    const byKey = new Map(items.map((item) => [item.key, item.analysis]));
+    updateMessages((previous) =>
+      previous.map((message) =>
+        message.attachments?.some((attachment) => byKey.has(attachment.key))
+          ? {
+              ...message,
+              attachments: message.attachments.map((attachment) =>
+                byKey.has(attachment.key) ? { ...attachment, analysis: byKey.get(attachment.key) } : attachment,
+              ),
+            }
+          : message,
+      ),
+    );
+  };
+
   /**
    * Pide la siguiente respuesta del asesor con el historial actual. Con el
    * historial vacío, el asesor abre la conversación por iniciativa propia.
@@ -146,11 +161,18 @@ export default function SavviIAChatPage() {
     setIsReplying(true);
     setActivity(messagesRef.current.length === 0 ? "Revisando cómo van tus finanzas" : null);
     try {
-      const reply = await AiChatService.send(toChatHistory(messagesRef.current), (step) => {
-        if (!isCurrent()) return;
-        steps.push(step);
-        setActivity(step.label);
-      });
+      const reply = await AiChatService.send(
+        toChatHistory(messagesRef.current),
+        (step) => {
+          if (!isCurrent()) return;
+          steps.push(step);
+          setActivity(step.label);
+        },
+        undefined,
+        (items) => {
+          if (isCurrent()) saveEvidenceAnalysis(items);
+        },
+      );
       recordUsage(reply.usage, isCurrent());
       if (!isCurrent()) return;
 
@@ -216,7 +238,12 @@ export default function SavviIAChatPage() {
   }, []);
 
   const handleSendMessage = async (text: string, options?: SendMessageOptions) => {
-    appendMessage({ role: "user", text, viaVoice: options?.viaVoice });
+    appendMessage({
+      role: "user",
+      text,
+      viaVoice: options?.viaVoice,
+      attachments: options?.attachments?.length ? options.attachments : undefined,
+    });
     if (options?.reply === false) return;
     await requestReply();
   };
@@ -278,69 +305,8 @@ export default function SavviIAChatPage() {
     },
   };
 
-  const pollJobUntilDone = async (jobId: string, attachmentName: string) => {
-    const conversationId = conversationIdRef.current;
-    setIsTyping(true);
-    setIsProcessingJob(true);
-    let completed = false;
-    try {
-      let attempts = 0;
-      const maxAttempts = 20;
-      let job: AiRegisterJobResponse | null = null;
-
-      while (attempts < maxAttempts) {
-        job = await AiRegisterService.getJob(jobId);
-        if (job.status === "completed" || job.status === "failed") break;
-        attempts += 1;
-        await wait(2000);
-      }
-      if (conversationId !== conversationIdRef.current) return;
-
-      if (!job) {
-        appendAssistantMessage("No fue posible consultar el estado del registro. Intenta nuevamente.", {
-          status: "failed",
-          attachmentName,
-        });
-        return;
-      }
-
-      if (job.status === "completed" && job.transactionId) {
-        appendAssistantMessage("Listo, registré la transacción de tu archivo.", {
-          status: "completed",
-          attachmentName,
-        });
-        completed = true;
-        return;
-      }
-
-      const errorText = job.error || "No se pudo extraer la información necesaria del archivo.";
-      appendAssistantMessage(`Falló el registro automático.\n${errorText}`, { status: "failed", attachmentName });
-    } catch {
-      appendAssistantMessage("Ocurrió un error al procesar el archivo.", { status: "failed", attachmentName });
-    } finally {
-      setIsTyping(false);
-      setIsProcessingJob(false);
-    }
-
-    if (completed && conversationId === conversationIdRef.current) {
-      await notifyAdvisor(
-        `(Mensaje automático de la app, no lo escribió el usuario) Se registró una transacción a partir del archivo "${attachmentName}". Revisa la transacción más reciente y coméntale al usuario en una o dos frases qué significa para su mes.`,
-      );
-    }
-  };
-
-  const handleJobCreated = (job: AiRegisterJobResponse, attachmentName: string) => {
-    appendAssistantMessage("Recibí tu archivo. Estoy procesándolo para registrar la transacción.", {
-      status: "queued",
-      attachmentName,
-    });
-    void pollJobUntilDone(job.id, attachmentName);
-  };
-
   const resetChat = () => {
     conversationIdRef.current += 1;
-    setIsTyping(false);
-    setIsProcessingJob(false);
     setIsReplying(false);
     setIsCreating(false);
     setActivity(null);
@@ -351,7 +317,7 @@ export default function SavviIAChatPage() {
     void requestReply();
   };
 
-  const isBusy = isTyping || isReplying;
+  const isBusy = isReplying;
   const hasConversation = messages.some((message) => message.role === "user" && !message.hidden);
   const lastVisible = [...messages].reverse().find((message) => !message.hidden);
   const suggestions =
@@ -413,8 +379,7 @@ export default function SavviIAChatPage() {
 
       <SavviIAComposer
         onSendMessage={(text, options) => void handleSendMessage(text, options)}
-        onJobCreated={handleJobCreated}
-        disabled={isProcessingJob || isReplying || isCreating}
+        disabled={isReplying || isCreating}
       />
     </section>
   );

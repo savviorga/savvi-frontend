@@ -162,6 +162,28 @@ async function uploadSingleFile(
   throw lastError;
 }
 
+/**
+ * Sube un archivo suelto con URL prefirmada (valida tipo y tamaño antes). Para
+ * componentes que llevan su propio estado por archivo (p. ej. el chat).
+ */
+export async function uploadFileToS3(
+  file: File,
+  folder: string,
+  onProgress: (percent: number) => void = () => {},
+  signal?: AbortSignal,
+): Promise<S3UploadResult> {
+  const invalid = validateDocumentFile(file);
+  if (invalid) {
+    throw { message: invalid, error: "Validation", statusCode: 400 } satisfies ApiError;
+  }
+  return uploadSingleFile(
+    file,
+    folder,
+    (loaded, total) => onProgress(total > 0 ? Math.round((loaded / total) * 100) : 0),
+    signal,
+  );
+}
+
 export function useS3Upload() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress[]>([]);

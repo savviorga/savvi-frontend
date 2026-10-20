@@ -16,6 +16,9 @@ export const TEXT_MODEL = process.env.IA_MODEL_TEXTO?.trim() || "gpt-4o-mini";
 /** Modelo conversacional de Savvi IA; por defecto el mismo de texto. */
 export const CHAT_MODEL = process.env.IA_MODEL_CHAT?.trim() || TEXT_MODEL;
 
+/** Modelo con visión que lee las evidencias (fotos, PDF); por defecto el del chat. */
+export const VISION_MODEL = process.env.IA_MODEL_VISION?.trim() || CHAT_MODEL;
+
 export class OpenAIError extends Error {
   constructor(
     message: string,

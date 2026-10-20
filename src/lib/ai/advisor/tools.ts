@@ -121,7 +121,7 @@ export const ADVISOR_TOOLS = [
   }),
   listTool(
     "proponer_transacciones",
-    "Propone registrar ingresos o gastos que el usuario te contó. Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
+    "Propone registrar ingresos o gastos que el usuario te contó o que salen de una evidencia que adjuntó (recibo, factura, comprobante). Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
     "transacciones",
     {
       date: { type: "string", description: "Fecha YYYY-MM-DD." },
@@ -130,6 +130,10 @@ export const ADVISOR_TOOLS = [
       categoryId: ids("id de una categoría del catálogo cuyo tipo coincida con type."),
       accountId: ids("id de una cuenta del catálogo."),
       description: nullable("string", "Descripción corta, o null."),
+      evidencia: nullable(
+        "string",
+        "id de la evidencia (E1, E2…) de la que sale este movimiento: el archivo queda como soporte de la transacción. null si no viene de un archivo.",
+      ),
     },
   ),
   listTool(

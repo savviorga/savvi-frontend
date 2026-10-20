@@ -9,6 +9,7 @@ import type {
   AccountDraft,
   BudgetDraft,
   CategoryDraft,
+  ChatAttachment,
   DebtDraft,
   DebtPaymentDraft,
   ProposalData,
@@ -150,7 +151,13 @@ function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): Acco
   });
 }
 
-function transactions(args: Args, catalog: AdvisorCatalog, problems: string[], userText: string): TransactionDraft[] {
+function transactions(
+  args: Args,
+  catalog: AdvisorCatalog,
+  problems: string[],
+  userText: string,
+  evidence: Map<string, ChatAttachment>,
+): TransactionDraft[] {
   const fail = rejecter(problems);
   const find = lookup(catalog);
   const rows = list(args, "transacciones", problems, MAX_TRANSACTIONS);
@@ -167,6 +174,9 @@ function transactions(args: Args, catalog: AdvisorCatalog, problems: string[], u
     if (!category) return fail(`${label}: categoryId no existe en el catálogo.`);
     if (category.type !== type) return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
     if (!account) return fail(`${label}: accountId no existe en el catálogo.`);
+    const evidenceId = text(item.evidencia, 10)?.toUpperCase();
+    const source = evidenceId ? evidence.get(evidenceId) : undefined;
+    if (evidenceId && !source) problems.push(`${label}: la evidencia ${evidenceId} no existe; se registra sin soporte.`);
     return [
       {
         date,
@@ -177,6 +187,7 @@ function transactions(args: Args, catalog: AdvisorCatalog, problems: string[], u
         accountId: account.id,
         accountName: account.name,
         description: text(item.description, 500),
+        evidence: source ? { key: source.key, name: source.name, size: source.size } : undefined,
         warning:
           known && !known.has(amount)
             ? "Este monto no aparece en lo que escribiste: revísalo antes de registrarlo."
@@ -305,8 +316,10 @@ function recurring(args: Args, catalog: AdvisorCatalog, problems: string[]): Rec
 }
 
 /**
- * @param userText lo que escribió el usuario en la conversación: los montos de
- * una lista larga se verifican contra él para marcar los que el modelo inventó.
+ * @param userText lo que escribió el usuario en la conversación (incluida la
+ * lectura de sus evidencias): los montos de una lista larga se verifican contra
+ * él para marcar los que el modelo inventó.
+ * @param evidence evidencias de la conversación por id (E1, E2…).
  */
 export function checkProposal(
   name: ProposalToolName,
@@ -314,6 +327,7 @@ export function checkProposal(
   catalog: AdvisorCatalog,
   existingBudgets: Budget[],
   userText = "",
+  evidence: Map<string, ChatAttachment> = new Map(),
 ): ProposalCheck {
   const problems: string[] = [];
   const message = text(args.mensaje, 2000);
@@ -327,7 +341,7 @@ export function checkProposal(
       case "proponer_cuentas":
         return wrap("accounts", accounts(args, catalog, problems));
       case "proponer_transacciones":
-        return wrap("transactions", transactions(args, catalog, problems, userText));
+        return wrap("transactions", transactions(args, catalog, problems, userText, evidence));
       case "proponer_presupuestos":
         return wrap("budgets", budgets(args, catalog, problems, existingBudgets));
       case "proponer_deudas":

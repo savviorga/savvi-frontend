@@ -15,6 +15,15 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // Pruebas unitarias de lógica (Node, sin navegador): `npm test`.
+        resolve: { alias: { '@': path.join(dirname, 'src') } },
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['src/**/*.test.ts', 'app/**/*.test.ts'],
+        },
+      },
+      {
         extends: true,
         plugins: [
           // The plugin will run tests for the stories defined in your Storybook config

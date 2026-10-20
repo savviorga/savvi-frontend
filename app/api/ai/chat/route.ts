@@ -1,5 +1,5 @@
 import { CHAT_MODEL, OpenAIError, errorResponse, openAiJson } from "@/lib/openai";
-import { requireAuthorization } from "@/lib/backend-server";
+import { requireSession } from "@/lib/ai-session";
 import { AdvisorData, loadSnapshot, type AdvisorSnapshot } from "@/lib/ai/advisor/snapshot";
 import { ADVISOR_PROMPT, kickoffInstruction } from "@/lib/ai/advisor/prompt";
 import {
@@ -237,7 +237,7 @@ export async function POST(request: Request): Promise<Response> {
 
   // Lo que falle antes de empezar a transmitir responde con su código HTTP.
   try {
-    const authorization = requireAuthorization(request);
+    const { authorization } = await requireSession(request);
     const body = (await request.json().catch(() => ({}))) as { messages?: unknown };
     messages = readMessages(body.messages);
     if (messages.length > 0 && messages[messages.length - 1].role !== "user") {

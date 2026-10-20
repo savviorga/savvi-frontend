@@ -10,7 +10,7 @@
 import { OpenAIError } from "@/lib/openai";
 import { getPublicApiUrl } from "@/lib/public-api-url";
 
-function backendBaseUrl(): string {
+export function backendBaseUrl(): string {
   const internal = process.env.API_URL_INTERNAL?.trim().replace(/\/+$/, "");
   const url = internal || getPublicApiUrl();
   if (!url) {
@@ -40,13 +40,4 @@ export async function backendGet<T>(path: string, authorization: string): Promis
     throw new OpenAIError(`El backend respondió ${res.status} en ${path}.`, 502);
   }
   return res.json() as Promise<T>;
-}
-
-/** Lee el header de sesión o corta con 401. */
-export function requireAuthorization(request: Request): string {
-  const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) {
-    throw new OpenAIError("Inicia sesión para hablar con Savvi IA.", 401);
-  }
-  return authorization;
 }

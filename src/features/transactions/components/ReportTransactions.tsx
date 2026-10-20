@@ -19,6 +19,7 @@ import { Doughnut, Line } from "react-chartjs-2";
 import type { Transaction } from "@/features/transactions/types/transactions.types";
 import type { Category } from "@/features/transactions/types/catalog.types";
 import MobileReportView from "./MobileReportView";
+import { formatMonthKey, monthStartLocalISO, toLocalISODate, todayLocalISO } from "@/lib/dates";
 
 ChartJS.register(
   ArcElement,
@@ -38,7 +39,7 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = todayLocalISO;
 
 type ReportTransactionsProps = {
   transactions: Transaction[];
@@ -67,14 +68,14 @@ export default function ReportTransactions({ transactions, categories = [] }: Re
       case "yesterday": {
         const y = new Date();
         y.setDate(y.getDate() - 1);
-        const iso = y.toISOString().slice(0, 10);
+        const iso = toLocalISODate(y);
         setFromDate(iso);
         setToDate(iso);
         break;
       }
       case "month": {
         const now = new Date();
-        setFromDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
+        setFromDate(monthStartLocalISO(now));
         setToDate(todayISO());
         break;
       }
@@ -125,7 +126,7 @@ export default function ReportTransactions({ transactions, categories = [] }: Re
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
       .map(([key, value]) => ({
-        label: format(new Date(`${key}-01`), "MMM yyyy", { locale: es }),
+        label: formatMonthKey(key),
         value,
       }));
   }, [filtered]);
@@ -147,7 +148,7 @@ export default function ReportTransactions({ transactions, categories = [] }: Re
     for (let i = 13; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = toLocalISODate(d);
       days.push({
         iso,
         label: format(d, "d MMM", { locale: es }),
@@ -399,7 +400,7 @@ function WeeklyHeatmap({
   onDayClick: (iso: string) => void;
 }) {
   const maxTotal = Math.max(...days.map((d) => d.total), 1);
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayLocalISO();
 
   return (
     <article className="rounded-2xl border border-border bg-card p-3 sm:p-4">

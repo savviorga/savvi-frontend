@@ -17,9 +17,9 @@ import type {
   Debt,
   CreateDebtDto,
 } from "@/features/payment-planner/types/debt.types";
-import { differenceInCalendarDays, format, parse, startOfDay } from "date-fns";
-import { es } from "date-fns/locale";
+import { differenceInCalendarDays, parse, startOfDay } from "date-fns";
 import { ProgressBar } from "@/components/ProgressBar";
+import { formatLocalDate } from "@/lib/dates";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -116,7 +116,7 @@ export default function PlanificadorPage() {
     return debts
       .filter((d) => d.status === "pending")
       .sort(
-        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+        (a, b) => a.dueDate.slice(0, 10).localeCompare(b.dueDate.slice(0, 10)),
       );
   }, [debts]);
 
@@ -125,7 +125,7 @@ export default function PlanificadorPage() {
     return debts
       .filter((d) => d.status === "paid")
       .sort(
-        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+        (a, b) => a.dueDate.slice(0, 10).localeCompare(b.dueDate.slice(0, 10)),
       );
   }, [debts]);
 
@@ -142,7 +142,7 @@ export default function PlanificadorPage() {
       }
     }
     rows.sort(
-      (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime(),
+      (a, b) => String(b.paidAt).slice(0, 10).localeCompare(String(a.paidAt).slice(0, 10)),
     );
     return rows;
   }, [debts]);
@@ -248,7 +248,7 @@ export default function PlanificadorPage() {
       header: "Vencimiento",
       render: (d) => (
         <span className="text-muted-foreground">
-          {format(new Date(d.dueDate), "d MMM yyyy", { locale: es })}
+          {formatLocalDate(d.dueDate)}
         </span>
       ),
     },
@@ -354,7 +354,7 @@ export default function PlanificadorPage() {
       className: "text-right",
       render: (row) => (
         <span className="text-muted-foreground">
-          {format(new Date(row.paidAt), "d MMM yyyy", { locale: es })}
+          {formatLocalDate(String(row.paidAt))}
         </span>
       ),
     },

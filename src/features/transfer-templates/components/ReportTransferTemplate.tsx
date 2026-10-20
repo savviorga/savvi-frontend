@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   ArcElement,
   CategoryScale,
@@ -17,6 +15,7 @@ import {
 import { Doughnut, Line } from "react-chartjs-2";
 import type { TransferTemplate } from "@/features/transfer-templates/types/transfer.types";
 import type { Transaction } from "@/features/transactions/types/transactions.types";
+import { formatMonthKey } from "@/lib/dates";
 
 ChartJS.register(
   ArcElement,
@@ -62,7 +61,7 @@ export default function ReportTransferTemplate({
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
       .map(([key, value]) => ({
-        label: format(new Date(`${key}-01`), "MMM yyyy", { locale: es }),
+        label: formatMonthKey(key),
         value,
       }));
   }, [transferTransactions]);

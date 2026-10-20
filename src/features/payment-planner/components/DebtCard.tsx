@@ -1,8 +1,7 @@
 "use client";
 
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import type { Debt } from "../types/debt.types";
+import { formatLocalDate } from "@/lib/dates";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -59,7 +58,7 @@ export default function DebtCard({
           Falta: <strong>{formatMoney(remaining)}</strong>
         </span>
         <span className="text-muted-foreground">
-          Límite: {format(new Date(debt.dueDate), "d MMM yyyy", { locale: es })}
+          Límite: {formatLocalDate(debt.dueDate)}
         </span>
       </div>
       {!isPaid && total > 0 && (

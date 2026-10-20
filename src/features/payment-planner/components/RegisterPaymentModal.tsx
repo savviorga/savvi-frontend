@@ -11,6 +11,7 @@ import type { Debt, RegisterPaymentDto } from "../types/debt.types";
 import type { Account } from "@/features/transactions/types/catalog.types";
 import type { Category } from "@/features/categories/types/category.type";
 import { categorySelectOptions } from "@/features/categories/utils/category-tree";
+import { toLocalISODate } from "@/lib/dates";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -71,7 +72,7 @@ export default function RegisterPaymentModal({
     if (!account || !category) return;
     const success = await onSubmit(debt.id, {
       amount: num,
-      paidAt: date ? date.toISOString().slice(0, 10) : undefined,
+      paidAt: date ? toLocalISODate(date) : undefined,
       account,
       categoryId: category,
       description: description.trim() || undefined,

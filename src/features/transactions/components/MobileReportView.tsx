@@ -7,6 +7,7 @@ import { Calendar } from "lucide-react";
 import type { Transaction } from "../types/transactions.types";
 import type { Category } from "../types/catalog.types";
 import { categoryPath } from "@/features/categories/utils/category-tree";
+import { monthStartLocalISO, toLocalISODate, todayLocalISO } from "@/lib/dates";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -16,7 +17,7 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = todayLocalISO;
 
 type QuickFilter = "today" | "yesterday" | "month" | "all";
 
@@ -45,18 +46,14 @@ export default function MobileReportView({
       case "yesterday": {
         const y = new Date();
         y.setDate(y.getDate() - 1);
-        const iso = y.toISOString().slice(0, 10);
+        const iso = toLocalISODate(y);
         setFromDate(iso);
         setToDate(iso);
         break;
       }
       case "month": {
         const now = new Date();
-        setFromDate(
-          new Date(now.getFullYear(), now.getMonth(), 1)
-            .toISOString()
-            .slice(0, 10),
-        );
+        setFromDate(monthStartLocalISO(now));
         setToDate(todayISO());
         break;
       }
@@ -110,9 +107,7 @@ export default function MobileReportView({
 
   const dailyAvg = useMemo(() => {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
+    const monthStart = monthStartLocalISO(now);
     const today = todayISO();
     const daysSet = new Set<string>();
     let totalEgreso = 0;
@@ -146,7 +141,7 @@ export default function MobileReportView({
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = toLocalISODate(d);
       days.push({
         iso,
         dayNum: d.getDate(),

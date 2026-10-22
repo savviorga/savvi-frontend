@@ -12,10 +12,12 @@ import type {
   ChatAttachment,
   DebtDraft,
   DebtPaymentDraft,
+  PlanItem,
   ProposalData,
   RecurringDraft,
   TransactionDraft,
 } from "@/features/savvi-ia/types/proposal.types";
+import { NEW_REF_PREFIX, categoryLabel, planItems, toProposalData } from "@/features/savvi-ia/utils/plan";
 import type { Budget } from "@/features/budgets/types/budget.type";
 import type { AdvisorCatalog } from "./snapshot";
 import { todayInBogota } from "./snapshot";
@@ -37,7 +39,7 @@ export interface ProposalCheck {
   problems: string[];
 }
 
-const maxItems = (kind: ProposalData["kind"]) => (kind === "transactions" ? MAX_TRANSACTIONS : MAX_ITEMS);
+const maxItems = (kind: PlanItem["kind"]) => (kind === "transactions" ? MAX_TRANSACTIONS : MAX_ITEMS);
 
 const text = (value: unknown, max: number): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
@@ -54,6 +56,9 @@ const isoDate = (value: unknown): string | undefined => {
 };
 
 const normalize = (name: string) => name.trim().toLocaleLowerCase("es");
+
+/** Para comparar rutas de categoría: "Transporte > Uber" y "transporte › uber" son la misma. */
+const labelKey = (label: string) => normalize(label).replace(/\s*(?:›|>|\/)\s*/g, " › ");
 
 function list(args: Args, key: string, problems: string[], max = MAX_ITEMS): Raw[] {
   const raw = args[key];
@@ -95,29 +100,95 @@ const rejecter = (problems: string[]) => (reason: string): [] => {
   return [];
 };
 
+/**
+ * Busca por id y, si no, por nombre: "nueva:<nombre>" es algo que se propone en
+ * esta misma respuesta (ya está en el catálogo extendido por {@link withProposed})
+ * o que ya existía con ese nombre. El modelo a veces omite el prefijo, así que
+ * también vale el nombre solo; en categorías basta el de la subcategoría. Solo
+ * se acepta si coincide con uno.
+ */
+function findIn<T extends { id: string; name: string }>(items: T[], id: unknown): T | undefined {
+  if (typeof id !== "string") return undefined;
+  const exact = items.find((item) => item.id === id);
+  if (exact) return exact;
+  const raw = id.trim();
+  const wanted = labelKey(normalize(raw).startsWith(NEW_REF_PREFIX) ? raw.slice(NEW_REF_PREFIX.length) : raw);
+  if (!wanted) return undefined;
+  const byLabel = items.filter((item) => labelKey(item.name) === wanted);
+  if (byLabel.length === 1) return byLabel[0];
+  const byLeaf = items.filter((item) => labelKey(item.name).split(" › ").at(-1) === wanted);
+  return byLeaf.length === 1 ? byLeaf[0] : undefined;
+}
+
 function lookup(catalog: AdvisorCatalog) {
   return {
-    category: (id: unknown) => catalog.categories.find((c) => c.id === id),
-    account: (id: unknown) => catalog.accounts.find((a) => a.id === id),
+    category: (id: unknown) => findIn(catalog.categories, id),
+    account: (id: unknown) => findIn(catalog.accounts, id),
     debt: (id: unknown) => catalog.debts.find((d) => d.id === id),
   };
 }
 
+const ALREADY_EXISTS = " ya existe.";
+
+/**
+ * No quedó nada por crear porque todo ya existía: no es un error que corregir,
+ * y lo que lo use con "nueva:<nombre>" encuentra lo que ya está.
+ */
+export const onlyExisting = (check: ProposalCheck) =>
+  !check.proposal && check.problems.length > 0 && check.problems.every((p) => p.endsWith(ALREADY_EXISTS));
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Nombre de un grupo que el modelo nombró sin proponerlo; un id inventado no cuenta. */
+function groupName(grupo: unknown): string | undefined {
+  const raw = text(grupo, 200);
+  if (!raw || UUID.test(raw)) return undefined;
+  const name = (normalize(raw).startsWith(NEW_REF_PREFIX) ? raw.slice(NEW_REF_PREFIX.length) : raw).trim();
+  return name && !/[›>/]/.test(name) ? name.slice(0, 100) : undefined;
+}
+
 function categories(args: Args, catalog: AdvisorCatalog, problems: string[]): CategoryDraft[] {
-  const seen = new Set(catalog.categories.map((c) => normalize(c.name)));
-  return list(args, "categorias", problems).flatMap((item): CategoryDraft[] => {
+  const fail = rejecter(problems);
+  const seen = new Set(catalog.categories.map((c) => labelKey(c.name)));
+  /** Lo propuesto en esta lista: una subcategoría puede colgar de un grupo nuevo. */
+  const proposed: AdvisorCatalog["categories"] = [];
+  // Los grupos primero, para que existan antes que sus subcategorías.
+  const rows = list(args, "categorias", problems).sort((a, b) => Number(a.grupo != null) - Number(b.grupo != null));
+  return rows.flatMap((item): CategoryDraft[] => {
     const name = text(item.name, 100);
     if (!name) return [];
-    if (seen.has(normalize(name))) {
-      problems.push(`La categoría "${name}" ya existe.`);
-      return [];
+    const type = item.type === "ingreso" ? "ingreso" : "egreso";
+    let parent = item.grupo != null ? findIn([...catalog.categories, ...proposed], item.grupo) : undefined;
+    /** Grupo que el modelo nombró pero no propuso: se crea también, antes que la subcategoría. */
+    const implicitGroup: CategoryDraft[] = [];
+    if (item.grupo != null && !parent) {
+      const group = groupName(item.grupo);
+      if (!group || seen.has(labelKey(group))) {
+        return fail(
+          `Subcategoría ${name}: el grupo no existe (usa el id de una categoría principal o "nueva:<Nombre>" de una que propones aquí).`,
+        );
+      }
+      const ref = `${NEW_REF_PREFIX}${group}`;
+      seen.add(labelKey(group));
+      parent = { id: ref, name: group, type, parentId: null, isGroup: true };
+      proposed.push(parent);
+      implicitGroup.push({ ref, name: group, type });
     }
-    seen.add(normalize(name));
+    if (parent) {
+      if (parent.parentId) return fail(`Subcategoría ${name}: ${parent.name} ya es subcategoría y solo hay dos niveles.`);
+      if (parent.type !== type) return fail(`Subcategoría ${name}: debe ser de ${parent.type}, como su grupo ${parent.name}.`);
+    }
+    const draft: CategoryDraft = { name, type, parentId: parent?.id, parentName: parent?.name };
+    const label = categoryLabel(draft);
+    if (seen.has(labelKey(label))) return fail(`La categoría "${label}"${ALREADY_EXISTS}`);
+    seen.add(labelKey(label));
+    draft.ref = `${NEW_REF_PREFIX}${label}`;
+    proposed.push({ id: draft.ref, name: label, type, parentId: parent?.id ?? null, isGroup: false });
     const color = text(item.color, 7);
     return [
+      ...implicitGroup,
       {
-        name,
-        type: item.type === "ingreso" ? "ingreso" : "egreso",
+        ...draft,
         description: text(item.description, 500),
         color: color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : undefined,
         budgetLimit: positive(item.budgetLimit),
@@ -132,13 +203,14 @@ function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): Acco
     const name = text(item.name, 100);
     if (!name) return [];
     if (seen.has(normalize(name))) {
-      problems.push(`La cuenta "${name}" ya existe.`);
+      problems.push(`La cuenta "${name}"${ALREADY_EXISTS}`);
       return [];
     }
     seen.add(normalize(name));
     const isCredit = item.isCredit === true;
     return [
       {
+        ref: `${NEW_REF_PREFIX}${name}`,
         name,
         description: text(item.description, 500) ?? "",
         initialBalance: positive(item.initialBalance),
@@ -150,6 +222,9 @@ function accounts(args: Args, catalog: AdvisorCatalog, problems: string[]): Acco
     ];
   });
 }
+
+/** Pista para el modelo cuando usa algo que no existe todavía. */
+const NEW_HINT = ' Si hay que crearla, propónla en esta misma respuesta y usa "nueva:<Nombre>".';
 
 function transactions(
   args: Args,
@@ -175,12 +250,12 @@ function transactions(
     if (!date) return fail(`${label}: fecha inválida (usa YYYY-MM-DD).`);
     // En transferencias la categoría es opcional; si viene, debe existir.
     if (!category && (!isTransfer || item.categoryId != null)) {
-      return fail(`${label}: categoryId no existe en el catálogo.`);
+      return fail(`${label}: categoryId no existe en el catálogo.${NEW_HINT}`);
     }
     if (category && !isTransfer && category.type !== type) {
       return fail(`${label}: la categoría ${category.name} es de ${category.type}, no de ${type}.`);
     }
-    if (!account) return fail(`${label}: accountId no existe en el catálogo.`);
+    if (!account) return fail(`${label}: accountId no existe en el catálogo.${NEW_HINT}`);
     if (isTransfer && !toAccount) {
       return fail(`${label}: toAccountId no existe en el catálogo (una transferencia va entre dos cuentas del usuario; un pago a otra persona es un egreso).`);
     }
@@ -372,19 +447,59 @@ export function checkProposal(
 }
 
 /**
- * Une dos propuestas del mismo tipo hechas en la misma respuesta (el modelo
- * puede partir una tabla larga en varias llamadas). Devuelve null si son de
- * tipos distintos.
+ * El catálogo más lo que crea una propuesta, con su `ref` como id: así la
+ * siguiente herramienta de la misma respuesta puede usar "nueva:Nequi".
  */
-export function mergeChecks(base: ProposalCheck, extra: ProposalCheck): ProposalCheck | null {
-  if (!base.proposal || !extra.proposal || base.proposal.kind !== extra.proposal.kind) return null;
-  const max = maxItems(base.proposal.kind);
-  const items = [...base.proposal.items, ...extra.proposal.items];
-  const problems = [...base.problems, ...extra.problems];
-  if (items.length > max) problems.push(`Solo se aceptan ${max} ítems por propuesta; se descartaron ${items.length - max}.`);
+export function withProposed(catalog: AdvisorCatalog, proposal: ProposalData | null): AdvisorCatalog {
+  if (!proposal) return catalog;
+  const items = planItems(proposal);
+  const categories = items.flatMap((item): AdvisorCatalog["categories"] =>
+    item.kind === "categories" && item.draft.ref
+      ? [
+          {
+            id: item.draft.ref,
+            name: categoryLabel(item.draft),
+            type: item.draft.type,
+            parentId: item.draft.parentId ?? null,
+            isGroup: items.some((other) => other.kind === "categories" && other.draft.parentId === item.draft.ref),
+          },
+        ]
+      : [],
+  );
+  const accounts = items.flatMap((item): AdvisorCatalog["accounts"] =>
+    item.kind === "accounts" && item.draft.ref
+      ? [{ id: item.draft.ref, name: item.draft.name, isCredit: item.draft.isCredit === true, isActive: true }]
+      : [],
+  );
   return {
-    message: base.message ?? extra.message,
-    proposal: { kind: base.proposal.kind, items: items.slice(0, max) } as ProposalData,
+    ...catalog,
+    categories: [...catalog.categories, ...categories],
+    accounts: [...catalog.accounts, ...accounts],
+  };
+}
+
+/**
+ * Une las propuestas de una misma respuesta en una sola tarjeta: del mismo
+ * tipo (una tabla larga partida en varias llamadas) o combinadas (lo que falta
+ * crear más lo que lo usa), en el orden en que se deben crear.
+ */
+export function mergeChecks(base: ProposalCheck, extra: ProposalCheck): ProposalCheck {
+  const problems = [...base.problems, ...extra.problems];
+  const perKind = new Map<PlanItem["kind"], number>();
+  const items = [base.proposal, extra.proposal]
+    .flatMap((proposal) => (proposal ? planItems(proposal) : []))
+    .filter((item) => {
+      const count = (perKind.get(item.kind) ?? 0) + 1;
+      perKind.set(item.kind, count);
+      return count <= maxItems(item.kind);
+    });
+  for (const [kind, count] of perKind) {
+    const max = maxItems(kind);
+    if (count > max) problems.push(`Solo se aceptan ${max} ítems de cada tipo por propuesta; se descartaron ${count - max}.`);
+  }
+  return {
+    message: extra.message ?? base.message,
+    proposal: items.length ? toProposalData(items) : null,
     problems,
   };
 }

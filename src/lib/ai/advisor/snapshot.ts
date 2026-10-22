@@ -78,6 +78,8 @@ export interface AdvisorSnapshot {
   prompt: string;
   /** Sin categorías o sin cuentas: el asesor arranca por la configuración */
   needsSetup: boolean;
+  /** Falta algún paso no opcional de la configuración guiada */
+  setupPending: boolean;
 }
 
 const money = (value: number) =>
@@ -113,6 +115,39 @@ export function groupSpend(
   return catalog.categories
     .filter((c) => c.id === categoryId || c.parentId === categoryId)
     .reduce((sum, c) => sum + (spent.get(c.id) ?? 0), 0);
+}
+
+/**
+ * Pasos de la configuración guiada, en el orden en que el asesor pregunta.
+ * Sale de los datos reales: al confirmar una tarjeta, el paso queda hecho.
+ */
+function setupChecklist(
+  catalog: AdvisorCatalog,
+  monthBudgets: number,
+  debts: number,
+  summary: ProfileSummary,
+): { lines: string[]; pending: boolean } {
+  const income = catalog.categories.filter((c) => c.type === "ingreso").length;
+  const expense = catalog.categories.length - income;
+  const steps: { label: string; count: number; optional?: boolean }[] = [
+    { label: "Categorías de ingreso (de dónde le entra la plata)", count: income },
+    { label: "Cuentas (bancos, billeteras, efectivo, tarjetas)", count: catalog.accounts.length },
+    { label: "Categorías y subcategorías de gasto", count: expense },
+    { label: "Presupuestos de este mes", count: monthBudgets },
+    { label: "Pagos recurrentes (arriendo, servicios, suscripciones)", count: summary.transferTemplates.count, optional: true },
+    { label: "Deudas", count: debts, optional: true },
+    { label: "Primeros movimientos", count: summary.transactions.count },
+  ];
+  const done = steps.filter((s) => s.count > 0).length;
+  return {
+    lines: [
+      `CONFIGURACIÓN DE LA CUENTA (${done} de ${steps.length} pasos):`,
+      ...steps.map(
+        (s) => `- [${s.count > 0 ? "x" : " "}] ${s.label}${s.count > 0 ? ` (${s.count})` : s.optional ? " (opcional)" : ""}`,
+      ),
+    ],
+    pending: steps.some((s) => !s.optional && s.count === 0),
+  };
 }
 
 export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> {
@@ -155,6 +190,7 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
   const pendingDebts = debts.filter((d) => d.status === "pending");
   const { totals, currentMonth, averages, monthly } = summary;
   const lastMonths = monthly.slice(-3);
+  const setup = setupChecklist(catalog, monthBudgets.length, debts.length, summary);
 
   const lines = [
     `HOY: ${today} (Colombia).`,
@@ -200,6 +236,8 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
       : ["- (ninguna)"]),
     "",
     `PAGOS RECURRENTES: ${summary.transferTemplates.count} plantillas (${summary.transferTemplates.active} activas).`,
+    "",
+    ...setup.lines,
   ];
 
   return {
@@ -207,5 +245,6 @@ export async function loadSnapshot(data: AdvisorData): Promise<AdvisorSnapshot> 
     catalog,
     prompt: lines.join("\n"),
     needsSetup: catalog.categories.length === 0 || catalog.accounts.length === 0,
+    setupPending: setup.pending,
   };
 }

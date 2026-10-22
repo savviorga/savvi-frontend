@@ -3,13 +3,21 @@
  * crea en el servidor: al confirmar, el navegador envía cada borrador a su
  * endpoint real. Los campos `*Name` solo sirven para mostrar la tarjeta; el
  * payload que va al backend se arma en `utils/proposals.ts`.
+ * Una propuesta puede crear lo que le falta (cuentas, categorías): mientras no
+ * existe, cada ítem nuevo se nombra por su `ref` ("nueva:Nequi") y los demás
+ * ítems lo usan en lugar del id real.
  * Lo comparten el route handler y el navegador: solo tipos, sin dependencias.
  */
 
 /** `POST /categories` */
 export interface CategoryDraft {
+  /** "nueva:Grupo › Subcategoría": cómo la usan los demás ítems de la propuesta */
+  ref?: string;
   name: string;
   type: "ingreso" | "egreso";
+  /** Grupo, si es subcategoría: id real o `ref` de un grupo nuevo de la misma propuesta */
+  parentId?: string;
+  parentName?: string;
   description?: string;
   color?: string;
   budgetLimit?: number;
@@ -17,6 +25,8 @@ export interface CategoryDraft {
 
 /** `POST /accounts` */
 export interface AccountDraft {
+  /** "nueva:Nombre": cómo la usan los demás ítems de la propuesta */
+  ref?: string;
   name: string;
   description: string;
   initialBalance?: number;
@@ -118,7 +128,7 @@ export interface RecurringDraft {
   dayOfMonth: number;
 }
 
-export type ProposalData =
+type SingleProposalData =
   | { kind: "categories"; items: CategoryDraft[] }
   | { kind: "accounts"; items: AccountDraft[] }
   | { kind: "transactions"; items: TransactionDraft[] }
@@ -126,6 +136,17 @@ export type ProposalData =
   | { kind: "debts"; items: DebtDraft[] }
   | { kind: "debtPayments"; items: DebtPaymentDraft[] }
   | { kind: "recurring"; items: RecurringDraft[] };
+
+type ToPlanItem<P> = P extends { kind: infer K; items: (infer D)[] } ? { kind: K; draft: D } : never;
+
+/** Un borrador con su tipo al lado: los ítems de una propuesta combinada. */
+export type PlanItem = ToPlanItem<SingleProposalData>;
+
+/**
+ * `plan`: propuesta combinada (p. ej. la cuenta y la categoría que faltan más
+ * el gasto que las usa), ordenada para crear primero lo que otros necesitan.
+ */
+export type ProposalData = SingleProposalData | { kind: "plan"; items: PlanItem[] };
 
 export type ProposalKind = ProposalData["kind"];
 

@@ -6,6 +6,7 @@ import { TransactionService } from "@/features/transactions/services/transaction
 import { TransferTemplatesService } from "@/features/transfer-templates/services/transfer-templates.service";
 import { getErrorMessages, isApiError } from "@/types/api-error.type";
 import type {
+  PlanItem,
   Proposal,
   ProposalData,
   ProposalItemResult,
@@ -13,6 +14,7 @@ import type {
   TransactionDraft,
 } from "../types/proposal.types";
 import type { CreateTransactionDto } from "@/features/transactions/types/transactions.types";
+import { categoryLabel, ownRef, planItems } from "./plan";
 
 /**
  * Transacciones por petición a `POST /transactions/bulk`. Los lotes se envían
@@ -47,17 +49,26 @@ export const PROPOSAL_META: Record<
   debts: { one: "deuda", many: "deudas", verb: "Registrar", done: "registrada", doneMany: "registradas" },
   debtPayments: { one: "abono", many: "abonos", verb: "Registrar", done: "registrado", doneMany: "registrados" },
   recurring: { one: "pago recurrente", many: "pagos recurrentes", verb: "Crear", done: "creado", doneMany: "creados" },
+  plan: { one: "cambio", many: "cambios", verb: "Confirmar", done: "guardado", doneMany: "guardados" },
 };
 
 export const proposalNoun = (kind: ProposalKind, count: number) =>
   count === 1 ? PROPOSAL_META[kind].one : PROPOSAL_META[kind].many;
+
+/** "1 cuenta, 2 categorías y 1 transacción" */
+export function describeCounts(proposal: ProposalData): string {
+  const counts = new Map<PlanItem["kind"], number>();
+  for (const item of planItems(proposal)) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+  const parts = [...counts].map(([kind, count]) => `${count} ${proposalNoun(kind, count)}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}` : (parts[0] ?? "");
+}
 
 /** Los ítems con advertencia (monto no verificado) arrancan desmarcados. */
 export const toProposal = (data: ProposalData): Proposal =>
   ({
     ...data,
     status: "pending",
-    selected: data.items.map((item) => !("warning" in item && item.warning)),
+    selected: planItems(data).map(({ draft }) => !("warning" in draft && draft.warning)),
   }) as Proposal;
 
 export type BadgeTone = "income" | "expense" | "credit" | "neutral";
@@ -76,18 +87,17 @@ export interface ProposalItemView {
 
 const join = (...parts: (string | number | null | undefined | false)[]) => parts.filter(Boolean).join(" · ");
 
-/** Cómo se ve cada ítem en la tarjeta. */
-export function toItemViews(proposal: ProposalData): ProposalItemView[] {
-  switch (proposal.kind) {
+function itemView({ kind, draft: item }: PlanItem): ProposalItemView {
+  switch (kind) {
     case "categories":
-      return proposal.items.map((item) => ({
-        title: item.name,
+      return {
+        title: categoryLabel(item),
         detail: join(item.description, item.budgetLimit && `Presupuesto: ${formatCop(item.budgetLimit)}/mes`),
         badge: item.type === "ingreso" ? { label: "Ingreso", tone: "income" } : { label: "Egreso", tone: "expense" },
         color: item.color,
-      }));
+      };
     case "accounts":
-      return proposal.items.map((item) => ({
+      return {
         title: item.name,
         detail: join(
           item.description,
@@ -97,9 +107,9 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
           item.dueDay && `Pago: día ${item.dueDay}`,
         ),
         badge: item.isCredit ? { label: "Crédito", tone: "credit" } : undefined,
-      }));
+      };
     case "transactions":
-      return proposal.items.map((item) => ({
+      return {
         title: item.description || item.categoryName || "Transferencia",
         detail: join(
           shortDate(item.date),
@@ -112,18 +122,18 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
         },
         warning: item.warning,
         attachment: item.evidence?.name,
-      }));
+      };
     case "budgets":
-      return proposal.items.map((item) => ({
+      return {
         title: item.categoryName,
         detail: join(
           `${MONTHS[item.month - 1]} ${item.year}`,
           item.currentAmount !== undefined ? `Antes: ${formatCop(item.currentAmount)}` : "Nuevo",
         ),
         amount: { value: item.amount, tone: "neutral" },
-      }));
+      };
     case "debts":
-      return proposal.items.map((item) => ({
+      return {
         title: item.name,
         detail: join(
           item.payee,
@@ -132,15 +142,15 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
           item.accountName,
         ),
         amount: { value: item.totalAmount, tone: "expense" },
-      }));
+      };
     case "debtPayments":
-      return proposal.items.map((item) => ({
+      return {
         title: `Abono a ${item.debtName}`,
         detail: join(item.paidAt ? shortDate(item.paidAt) : "Hoy", item.accountName, item.categoryName),
         amount: { value: item.amount, tone: "expense" },
-      }));
+      };
     case "recurring":
-      return proposal.items.map((item) => ({
+      return {
         title: item.name,
         detail: join(
           item.payeeName,
@@ -149,11 +159,14 @@ export function toItemViews(proposal: ProposalData): ProposalItemView[] {
           item.accountName,
         ),
         amount: item.initialAmount ? { value: item.initialAmount, tone: "neutral" } : undefined,
-      }));
+      };
   }
 }
 
-const describeItem = (view: ProposalItemView) =>
+/** Cómo se ve cada ítem en la tarjeta. */
+export const toItemViews = (proposal: ProposalData): ProposalItemView[] => planItems(proposal).map(itemView);
+
+const describeView = (view: ProposalItemView) =>
   join(
     view.title,
     view.detail,
@@ -162,10 +175,18 @@ const describeItem = (view: ProposalItemView) =>
     view.attachment && `soporte: ${view.attachment}`,
   );
 
+/** Cada ítem en una línea; en una propuesta combinada, con su tipo delante. */
+function describeItems(proposal: ProposalData): string[] {
+  return planItems(proposal).map((item) => {
+    const text = describeView(itemView(item));
+    return proposal.kind === "plan" ? `${PROPOSAL_META[item.kind].one}: ${text}` : text;
+  });
+}
+
 /** Resumen de la propuesta para el historial que ve el modelo. */
 export function describeProposalForModel(proposal: Proposal): string {
-  const items = toItemViews(proposal)
-    .map((view) => `- ${describeItem(view)}`)
+  const items = describeItems(proposal)
+    .map((line) => `- ${line}`)
     .join("\n");
   const state =
     proposal.status === "dismissed"
@@ -178,14 +199,12 @@ export function describeProposalForModel(proposal: Proposal): string {
 
 /** Mensaje automático tras confirmar: le dice al modelo qué quedó y qué falló. */
 export function describeResultsForModel(proposal: Proposal): string {
-  const views = toItemViews(proposal);
   const ok: string[] = [];
   const failed: string[] = [];
   const skipped: string[] = [];
 
-  views.forEach((view, index) => {
+  describeItems(proposal).forEach((label, index) => {
     const result = proposal.results?.[index];
-    const label = describeItem(view);
     if (!proposal.selected[index]) skipped.push(label);
     else if (result?.ok) ok.push(result.note ? `${label} (${result.note})` : label);
     else if (result) failed.push(`${label}: ${result.error}`);
@@ -194,7 +213,7 @@ export function describeResultsForModel(proposal: Proposal): string {
   const meta = PROPOSAL_META[proposal.kind];
   return [
     `(Mensaje automático de la app, no lo escribió el usuario) Resultado de la propuesta de ${meta.many}:`,
-    ok.length ? `Quedaron ${meta.doneMany}:\n${ok.map((c) => `- ${c}`).join("\n")}` : `No quedó ninguna ${meta.one} ${meta.done}.`,
+    ok.length ? `Quedaron ${meta.doneMany}:\n${ok.map((c) => `- ${c}`).join("\n")}` : "No se guardó nada.",
     skipped.length ? `El usuario desmarcó:\n${skipped.map((s) => `- ${s}`).join("\n")}` : "",
     failed.length ? `Fallaron:\n${failed.map((f) => `- ${f}`).join("\n")}` : "",
     "Confírmale al usuario lo que quedó en una frase y sigue tomando la iniciativa con el siguiente paso.",
@@ -210,13 +229,31 @@ const errorText = (error: unknown): string =>
       ? error.message
       : "Error inesperado";
 
-const toTransactionDto = (t: TransactionDraft): CreateTransactionDto => ({
+/** Ids reales de lo que la propuesta ya creó, por su `ref`. */
+type CreatedIds = Map<string, string>;
+
+/**
+ * Cambia la `ref` de un ítem nuevo de la propuesta por su id real. Si ese ítem
+ * no se pudo crear, lo que lo usa tampoco se guarda.
+ */
+function resolver(refs: Set<string>, created: CreatedIds) {
+  return function resolve<T extends string | undefined>(id: T, name?: string): T {
+    if (!id || !refs.has(id)) return id;
+    const real = created.get(id);
+    if (!real) throw new Error(`No se guardó porque ${name ? `"${name}"` : "lo que necesita"} no se pudo crear.`);
+    return real as T;
+  };
+}
+
+type Resolve = ReturnType<typeof resolver>;
+
+const toTransactionDto = (t: TransactionDraft, resolve: Resolve): CreateTransactionDto => ({
   date: t.date,
   type: t.type,
   amount: t.amount,
-  categoryId: t.categoryId,
-  account: t.accountId,
-  toAccount: t.toAccountId ?? null,
+  categoryId: resolve(t.categoryId, t.categoryName),
+  account: resolve(t.accountId, t.accountName),
+  toAccount: resolve(t.toAccountId, t.toAccountName) ?? null,
   description: t.description,
 });
 
@@ -236,81 +273,99 @@ async function attachEvidence(transactionId: string, draft: TransactionDraft): P
 
 /**
  * Envía un ítem a su endpoint real con el payload exacto del DTO del backend.
- * Devuelve una nota si quedó creado con algún detalle.
+ * Devuelve el id de lo creado (si otros ítems lo usan) y una nota si quedó
+ * creado con algún detalle.
  */
-async function executeItem(proposal: ProposalData, index: number): Promise<string | undefined> {
-  switch (proposal.kind) {
-    case "categories":
-      await CategoryService.create({ ...proposal.items[index], isActive: true });
-      return;
-    case "accounts":
-      await AccountService.create(proposal.items[index]);
-      return;
-    case "transactions": {
-      const draft = proposal.items[index];
-      const created = await TransactionService.create(toTransactionDto(draft));
-      return attachEvidence(created.id, draft);
+async function executeItem({ kind, draft }: PlanItem, resolve: Resolve): Promise<{ id?: string; note?: string }> {
+  switch (kind) {
+    case "categories": {
+      const created = await CategoryService.create({
+        name: draft.name,
+        type: draft.type,
+        description: draft.description,
+        color: draft.color,
+        budgetLimit: draft.budgetLimit,
+        parentId: resolve(draft.parentId, draft.parentName),
+        isActive: true,
+      });
+      return { id: created.id };
     }
-    case "budgets": {
-      const b = proposal.items[index];
+    case "accounts": {
+      const created = await AccountService.create({
+        name: draft.name,
+        description: draft.description,
+        initialBalance: draft.initialBalance,
+        isCredit: draft.isCredit,
+        creditLimit: draft.creditLimit,
+        statementDay: draft.statementDay,
+        dueDay: draft.dueDay,
+      });
+      return { id: created.id };
+    }
+    case "transactions": {
+      const created = await TransactionService.create(toTransactionDto(draft, resolve));
+      return { note: await attachEvidence(created.id, draft) };
+    }
+    case "budgets":
       await BudgetService.createOrUpdate({
-        categoryId: b.categoryId,
-        amount: b.amount,
-        year: b.year,
-        month: b.month,
+        categoryId: resolve(draft.categoryId, draft.categoryName),
+        amount: draft.amount,
+        year: draft.year,
+        month: draft.month,
         period: "monthly",
         isActive: true,
       });
-      return;
-    }
-    case "debts": {
-      const d = proposal.items[index];
+      return {};
+    case "debts":
       await PaymentPlannerService.create({
-        name: d.name,
-        payee: d.payee,
-        totalAmount: d.totalAmount,
-        dueDate: d.dueDate,
-        accountId: d.accountId,
-        notes: d.notes,
-        isRecurring: d.isRecurring,
-        recurrenceType: d.recurrenceType,
-        recurrenceDay: d.recurrenceDay,
+        name: draft.name,
+        payee: draft.payee,
+        totalAmount: draft.totalAmount,
+        dueDate: draft.dueDate,
+        accountId: resolve(draft.accountId, draft.accountName),
+        notes: draft.notes,
+        isRecurring: draft.isRecurring,
+        recurrenceType: draft.recurrenceType,
+        recurrenceDay: draft.recurrenceDay,
       });
-      return;
-    }
-    case "debtPayments": {
-      const p = proposal.items[index];
-      await PaymentPlannerService.registerPayment(p.debtId, {
-        amount: p.amount,
-        account: p.accountId,
-        categoryId: p.categoryId,
-        paidAt: p.paidAt,
-        description: p.description,
+      return {};
+    case "debtPayments":
+      await PaymentPlannerService.registerPayment(draft.debtId, {
+        amount: draft.amount,
+        account: resolve(draft.accountId, draft.accountName),
+        categoryId: resolve(draft.categoryId, draft.categoryName),
+        paidAt: draft.paidAt,
+        description: draft.description,
       });
-      return;
-    }
-    case "recurring": {
-      const r = proposal.items[index];
+      return {};
+    case "recurring":
       await TransferTemplatesService.create({
-        fromAccountId: r.fromAccountId,
-        name: r.name,
-        payeeName: r.payeeName,
-        payeeBank: r.payeeBank,
-        initialAmount: r.initialAmount,
-        recurrenceType: r.recurrenceType,
-        frequency: r.frequency,
-        dayOfMonth: r.dayOfMonth,
+        fromAccountId: resolve(draft.fromAccountId, draft.accountName),
+        name: draft.name,
+        payeeName: draft.payeeName,
+        payeeBank: draft.payeeBank,
+        initialAmount: draft.initialAmount,
+        recurrenceType: draft.recurrenceType,
+        frequency: draft.frequency,
+        dayOfMonth: draft.dayOfMonth,
       });
-      return;
-    }
+      return {};
   }
 }
 
 type ResultHandler = (index: number, result: ProposalItemResult) => void;
 
-async function executeOne(proposal: ProposalData, index: number, onResult: ResultHandler): Promise<void> {
+async function executeOne(
+  item: PlanItem,
+  index: number,
+  resolve: Resolve,
+  created: CreatedIds,
+  onResult: ResultHandler,
+): Promise<void> {
   try {
-    const note = await executeItem(proposal, index);
+    const { id, note } = await executeItem(item, resolve);
+    const ref = ownRef(item);
+    if (ref && id) created.set(ref, id);
     onResult(index, note ? { ok: true, note } : { ok: true });
   } catch (error) {
     onResult(index, { ok: false, error: errorText(error) });
@@ -327,36 +382,59 @@ const isRejectedBatch = (error: unknown) => isApiError(error) && error.statusCod
  * si falla por red o servidor no se reintenta, para no duplicar registros.
  */
 async function executeTransactionBatches(
-  proposal: Extract<ProposalData, { kind: "transactions" }>,
+  items: PlanItem[],
   indexes: number[],
+  resolve: Resolve,
+  created: CreatedIds,
   onResult: ResultHandler,
 ): Promise<void> {
-  for (let start = 0; start < indexes.length; start += TRANSACTION_BATCH_SIZE) {
-    const batch = indexes.slice(start, start + TRANSACTION_BATCH_SIZE);
-    let created: Awaited<ReturnType<typeof TransactionService.bulk>>;
+  // Las que usan una cuenta o categoría que no se pudo crear fallan sin enviarse.
+  const ready: { index: number; draft: TransactionDraft; dto: CreateTransactionDto }[] = [];
+  for (const index of indexes) {
+    const item = items[index];
+    if (item.kind !== "transactions") continue;
     try {
-      created = await TransactionService.bulk(batch.map((index) => toTransactionDto(proposal.items[index])));
+      ready.push({ index, draft: item.draft, dto: toTransactionDto(item.draft, resolve) });
+    } catch (error) {
+      onResult(index, { ok: false, error: errorText(error) });
+    }
+  }
+
+  for (let start = 0; start < ready.length; start += TRANSACTION_BATCH_SIZE) {
+    const batch = ready.slice(start, start + TRANSACTION_BATCH_SIZE);
+    let saved: Awaited<ReturnType<typeof TransactionService.bulk>>;
+    try {
+      saved = await TransactionService.bulk(batch.map((row) => row.dto));
     } catch (error) {
       if (isRejectedBatch(error)) {
-        for (const index of batch) await executeOne(proposal, index, onResult);
+        for (const row of batch) await executeOne(items[row.index], row.index, resolve, created, onResult);
       } else {
         const result: ProposalItemResult = { ok: false, error: errorText(error) };
-        batch.forEach((index) => onResult(index, result));
+        batch.forEach((row) => onResult(row.index, result));
       }
       continue;
     }
     // El backend devuelve las transacciones en el mismo orden del lote.
-    for (const [position, index] of batch.entries()) {
-      const transaction = created[position];
-      const note = transaction ? await attachEvidence(transaction.id, proposal.items[index]) : undefined;
-      onResult(index, note ? { ok: true, note } : { ok: true });
+    for (const [position, row] of batch.entries()) {
+      const transaction = saved[position];
+      const note = transaction ? await attachEvidence(transaction.id, row.draft) : undefined;
+      onResult(row.index, note ? { ok: true, note } : { ok: true });
     }
   }
 }
 
-/** Ejecuta en orden los ítems seleccionados, avisando el resultado de cada uno. */
+/**
+ * Ejecuta en orden los ítems seleccionados, avisando el resultado de cada uno.
+ * Lo nuevo (cuentas, categorías) va primero y su id real reemplaza su `ref` en
+ * lo que lo usa; las transacciones van al final, por lotes.
+ */
 export async function executeSelectedItems(proposal: Proposal, onResult: ResultHandler): Promise<void> {
-  const indexes = proposal.items.map((_, index) => index).filter((index) => proposal.selected[index]);
-  if (proposal.kind === "transactions") return executeTransactionBatches(proposal, indexes, onResult);
-  for (const index of indexes) await executeOne(proposal, index, onResult);
+  const items = planItems(proposal);
+  const indexes = items.map((_, index) => index).filter((index) => proposal.selected[index]);
+  const created: CreatedIds = new Map();
+  const resolve = resolver(new Set(items.flatMap((item) => ownRef(item) ?? [])), created);
+  for (const index of indexes) {
+    if (items[index].kind !== "transactions") await executeOne(items[index], index, resolve, created, onResult);
+  }
+  await executeTransactionBatches(items, indexes, resolve, created, onResult);
 }

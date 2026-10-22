@@ -16,6 +16,7 @@ import {
   executeSelectedItems,
   toProposal,
 } from "../utils/proposals";
+import { toggleSelection } from "../utils/plan";
 import { describeBlockForModel } from "../utils/blocks";
 import { clearChat, clearLegacyUsage, describeAbsence, loadChat, saveChat } from "../utils/chat-storage";
 import { AiUsageService, type AiUsageSummary } from "../services/ai-usage.service";
@@ -269,7 +270,7 @@ export default function SavviIAChatPage() {
     onToggle: (messageId, index) =>
       updateProposal(messageId, (proposal) => ({
         ...proposal,
-        selected: proposal.selected.map((value, i) => (i === index ? !value : value)),
+        selected: toggleSelection(proposal, proposal.selected, index),
       })),
     onDismiss: (messageId) => {
       updateProposal(messageId, (proposal) => ({ ...proposal, status: "dismissed" }));

@@ -149,6 +149,27 @@ export function asksPermissionToRegister(texts: string[]): boolean {
   );
 }
 
+const CREATE_VERB = /\b(cre[aoeé]|registr|agreg|añad|guard|anot|arm[aoeé]|configur|asign|dej[aoeé] list)/;
+const PERMISSION = /(te parece|te gustar[ií]a|quieres|deseas|proced|confirm|de acuerdo|est[aá] bien|todo bien|te sirve|lo hago|adelante)/;
+
+/**
+ * El asesor deja para después algo que debía proponer: pide permiso para
+ * crearlo ("¿creo estas categorías?", "¿te parece bien que las registre?") o
+ * anuncia que lo va a crear ("voy a registrarlas ahora mismo") sin preguntar
+ * nada más que un sí o un no. Más estricto que {@link asksPermissionToRegister}:
+ * una oferta como "¿te parece si revisamos tus gastos?" no cuenta, ni un anuncio
+ * seguido de una pregunta de verdad ("¿en qué se te va la plata?").
+ */
+export function defersCreation(texts: string[]): boolean {
+  const text = texts.join(" ").toLocaleLowerCase("es");
+  const questions = text.match(/¿[^?]*\?/g) ?? [];
+  const asksPermission = questions.some((q) => CREATE_VERB.test(q) && PERMISSION.test(q));
+  const announces =
+    questions.every((q) => PERMISSION.test(q)) &&
+    /\b(voy a|vamos a)\s+(\S+\s+){0,3}?(cre[aoeé]|registr|agreg|arm[aoeé]|configur|guard)/.test(text);
+  return asksPermission || announces;
+}
+
 /**
  * Montos que dijo el usuario que no coinciden con el total de ninguna evidencia
  * (p. ej. "me gasté 50 mil" con una factura de 71.850): hay que preguntarle.

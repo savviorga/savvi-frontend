@@ -85,6 +85,24 @@ describe("asksPermissionToRegister", () => {
     expect(asksPermissionToRegister(["¿Con qué cuenta pagaste?"])).toBe(false);
   });
 
+  it("defersCreation cuando pide permiso para crear o lo anuncia sin proponerlo", async () => {
+    const { defersCreation } = await import("./conversation");
+    expect(defersCreation(["¿Te parece bien que proceda a crear todas estas categorías?"])).toBe(true);
+    expect(defersCreation(["¿Confirmo la creación de las categorías?"])).toBe(true);
+    expect(defersCreation(["Ya casi. ¿Quieres que las registre así?"])).toBe(true);
+    expect(defersCreation(["¿Te parece bien si armamos esas categorías?"])).toBe(true);
+    expect(defersCreation(["Te voy a crear estas categorías.", "Voy a registrarlas ahora mismo. ¡Listo!"])).toBe(true);
+    expect(
+      defersCreation([
+        "Vamos a crear las siguientes categorías: Arriendo, Mercado.",
+        "¿Te parece bien si les asignamos un presupuesto de 600 mil?",
+        "¿Te gustaría agregar algún otro gasto?",
+      ]),
+    ).toBe(true);
+    expect(defersCreation(["¿Te parece si revisamos tus gastos del mes?"])).toBe(false);
+    expect(defersCreation(["Ahora vamos a configurar tus gastos. ¿En qué se te va la plata?"])).toBe(false);
+  });
+
   it("isPaymentEvidence solo con soportes legibles de pago", async () => {
     const { isPaymentEvidence } = await import("./conversation");
     const base = { key: "k", name: "n", mimeType: "image/png", size: 1 };

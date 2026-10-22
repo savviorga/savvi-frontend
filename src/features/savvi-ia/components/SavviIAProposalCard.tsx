@@ -1,16 +1,19 @@
 "use client";
 
+import { Fragment } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, ArrowRightLeft, ChartPie, Check, CheckCircle2, HandCoins, Landmark, Loader2, Paperclip, Receipt, Repeat, Tag, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, ChartPie, Check, CheckCircle2, HandCoins, Landmark, ListChecks, Loader2, Paperclip, Receipt, Repeat, Tag, XCircle } from "lucide-react";
 import type { Proposal, ProposalKind } from "../types/proposal.types";
 import {
   PROPOSAL_META,
   TRANSACTION_BATCH_SIZE,
+  describeCounts,
   formatCop,
   proposalNoun,
   toItemViews,
   type BadgeTone,
 } from "../utils/proposals";
+import { planItems } from "../utils/plan";
 
 interface SavviIAProposalCardProps {
   proposal: Proposal;
@@ -28,6 +31,7 @@ const KIND_ICON: Record<ProposalKind, LucideIcon> = {
   debts: Receipt,
   debtPayments: HandCoins,
   recurring: Repeat,
+  plan: ListChecks,
 };
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
@@ -52,6 +56,8 @@ export default function SavviIAProposalCard({
   onDismiss,
 }: SavviIAProposalCardProps) {
   const items = toItemViews(proposal);
+  const kinds = planItems(proposal).map((item) => item.kind);
+  const isPlan = proposal.kind === "plan";
   const meta = PROPOSAL_META[proposal.kind];
   const selectedCount = proposal.selected.filter(Boolean).length;
   const isPending = proposal.status === "pending";
@@ -60,7 +66,8 @@ export default function SavviIAProposalCard({
   const failedCount = proposal.results?.filter((r) => r && !r.ok).length ?? 0;
   const processed = doneCount + failedCount;
   const progress = selectedCount ? Math.round((processed / selectedCount) * 100) : 0;
-  const batchCount = proposal.kind === "transactions" ? Math.ceil(selectedCount / TRANSACTION_BATCH_SIZE) : 0;
+  const selectedTransactions = kinds.filter((kind, i) => kind === "transactions" && proposal.selected[i]).length;
+  const batchCount = Math.ceil(selectedTransactions / TRANSACTION_BATCH_SIZE);
   const currentBatch = Math.min(Math.floor(processed / TRANSACTION_BATCH_SIZE) + 1, batchCount);
   const HeaderIcon = KIND_ICON[proposal.kind];
   const total = items.reduce((sum, item, i) => sum + (proposal.selected[i] && item.amount ? item.amount.value : 0), 0);
@@ -75,7 +82,11 @@ export default function SavviIAProposalCard({
       <div className="flex items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50 px-4 py-2.5">
         <HeaderIcon className="h-4 w-4 text-emerald-600" aria-hidden />
         <p className="text-sm font-semibold text-slate-800">
-          {items.length === 1 ? `Propuesta: ${meta.one}` : `${items.length} ${meta.many} propuestas`}
+          {isPlan
+            ? `Propuesta: ${describeCounts(proposal)}`
+            : items.length === 1
+              ? `Propuesta: ${meta.one}`
+              : `${items.length} ${meta.many} propuestas`}
         </p>
         {showTotal && (
           <span className="ml-auto text-xs font-semibold tabular-nums text-slate-600">Total {formatCop(total)}</span>
@@ -105,80 +116,90 @@ export default function SavviIAProposalCard({
           const checked = proposal.selected[index];
           const result = proposal.results?.[index];
           const isWorking = isCreating && checked && !result;
+          const kind = kinds[index];
+          // En una propuesta combinada, cada tipo con su título: "Crear cuenta", "Registrar transacción".
+          const sectionSize = isPlan && kinds[index - 1] !== kind ? kinds.filter((k) => k === kind).length : 0;
 
           return (
-            <li key={`${item.title}-${index}`} className="savvi-msg-in" style={{ animationDelay: `${index * 0.05}s` }}>
-              <label
-                className={`flex items-start gap-3 px-4 py-2.5 transition-colors ${
-                  isPending && !disabled ? "cursor-pointer hover:bg-slate-50" : ""
-                } ${!checked ? "opacity-50" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  className="peer sr-only"
-                  checked={checked}
-                  disabled={!isPending || disabled}
-                  onChange={() => onToggle(index)}
-                />
-                <span
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-300 ${
-                    checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"
-                  }`}
-                  aria-hidden
+            <Fragment key={`${item.title}-${index}`}>
+              {sectionSize > 0 && (
+                <li className="bg-slate-50/80 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {PROPOSAL_META[kind].verb} {proposalNoun(kind, sectionSize)}
+                </li>
+              )}
+              <li className="savvi-msg-in" style={{ animationDelay: `${index * 0.05}s` }}>
+                <label
+                  className={`flex items-start gap-3 px-4 py-2.5 transition-colors ${
+                    isPending && !disabled ? "cursor-pointer hover:bg-slate-50" : ""
+                  } ${!checked ? "opacity-50" : ""}`}
                 >
-                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                </span>
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={checked}
+                    disabled={!isPending || disabled}
+                    onChange={() => onToggle(index)}
+                  />
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-300 ${
+                      checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"
+                    }`}
+                    aria-hidden
+                  >
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                  </span>
 
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {item.color && (
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {item.color && (
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} aria-hidden />
+                      )}
+                      <span className="text-sm font-medium text-slate-800">{item.title}</span>
+                      {item.badge && (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${BADGE_CLASS[item.badge.tone]}`}
+                        >
+                          {item.badge.label}
+                        </span>
+                      )}
+                    </span>
+                    {item.detail && <span className="mt-0.5 block text-xs text-slate-500">{item.detail}</span>}
+                    {item.warning && !result && (
+                      <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                        <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                        {item.warning}
+                      </span>
                     )}
-                    <span className="text-sm font-medium text-slate-800">{item.title}</span>
-                    {item.badge && (
-                      <span
-                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${BADGE_CLASS[item.badge.tone]}`}
-                      >
-                        {item.badge.label}
+                    {item.attachment && (
+                      <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                        <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
+                        <span className="truncate">Soporte: {item.attachment}</span>
+                      </span>
+                    )}
+                    {result && !result.ok && <span className="mt-0.5 block text-xs text-red-600">{result.error}</span>}
+                    {result?.ok && result.note && (
+                      <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
+                        <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                        Registrada, pero {result.note}
                       </span>
                     )}
                   </span>
-                  {item.detail && <span className="mt-0.5 block text-xs text-slate-500">{item.detail}</span>}
-                  {item.warning && !result && (
-                    <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
-                      {item.warning}
-                    </span>
-                  )}
-                  {item.attachment && (
-                    <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                      <Paperclip className="h-3 w-3 shrink-0" aria-hidden />
-                      <span className="truncate">Soporte: {item.attachment}</span>
-                    </span>
-                  )}
-                  {result && !result.ok && <span className="mt-0.5 block text-xs text-red-600">{result.error}</span>}
-                  {result?.ok && result.note && (
-                    <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600">
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
-                      Registrada, pero {result.note}
-                    </span>
-                  )}
-                </span>
 
-                {item.amount && (
-                  <span className={`mt-0.5 shrink-0 text-sm font-semibold tabular-nums ${AMOUNT_CLASS[item.amount.tone]}`}>
-                    {item.amount.tone === "income" ? "+" : item.amount.tone === "expense" ? "−" : ""}
-                    {formatCop(item.amount.value)}
+                  {item.amount && (
+                    <span className={`mt-0.5 shrink-0 text-sm font-semibold tabular-nums ${AMOUNT_CLASS[item.amount.tone]}`}>
+                      {item.amount.tone === "income" ? "+" : item.amount.tone === "expense" ? "−" : ""}
+                      {formatCop(item.amount.value)}
+                    </span>
+                  )}
+
+                  <span className="mt-0.5 w-4 shrink-0">
+                    {isWorking && <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />}
+                    {result?.ok && <CheckCircle2 className="savvi-msg-in h-4 w-4 text-emerald-500" />}
+                    {result && !result.ok && <XCircle className="savvi-msg-in h-4 w-4 text-red-500" />}
                   </span>
-                )}
-
-                <span className="mt-0.5 w-4 shrink-0">
-                  {isWorking && <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />}
-                  {result?.ok && <CheckCircle2 className="savvi-msg-in h-4 w-4 text-emerald-500" />}
-                  {result && !result.ok && <XCircle className="savvi-msg-in h-4 w-4 text-red-500" />}
-                </span>
-              </label>
-            </li>
+                </label>
+              </li>
+            </Fragment>
           );
         })}
       </ul>
@@ -210,7 +231,11 @@ export default function SavviIAProposalCard({
               className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-emerald-500/30 transition-all hover:scale-[1.03] hover:shadow-md active:scale-95 disabled:scale-100 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
             >
               {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
-              {isCreating ? `Guardando ${processed}/${selectedCount}...` : `${meta.verb} ${selectedCount}`}
+              {isCreating
+                ? `Guardando ${processed}/${selectedCount}...`
+                : isPlan && selectedCount === items.length
+                  ? "Confirmar todo"
+                  : `${meta.verb} ${selectedCount}`}
             </button>
           </>
         )}

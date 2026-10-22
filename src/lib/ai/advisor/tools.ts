@@ -8,10 +8,16 @@
 const nullable = (type: string, description: string) => ({ type: [type, "null"], description });
 const ids = (description: string) => ({ type: "string", description });
 
+/** Lo que se crea en la misma respuesta se usa por su nombre hasta que existe su id. */
+const NEW_ACCOUNT =
+  ' Si la cuenta aún no existe: "nueva:<Nombre>" y la propones en esta misma respuesta con proponer_cuentas.';
+const NEW_CATEGORY =
+  ' Si la categoría aún no existe: "nueva:<Grupo › Subcategoría>" (o "nueva:<Nombre>" si es principal) y la propones en esta misma respuesta con proponer_categorias.';
+
 const mensaje = {
   type: "string",
   description:
-    "Mensaje corto y cercano que presenta la propuesta y dice qué va a pasar al confirmar. Sin repetir la lista.",
+    "Mensaje corto y cercano que presenta la propuesta y dice qué va a pasar al confirmar. Sin repetir la lista. Si combinas varias proponer_* en una respuesta, pon en todas el mismo mensaje sobre todo lo que va a pasar.",
 };
 
 function tool(name: string, description: string, properties: Record<string, unknown>) {
@@ -100,11 +106,15 @@ export const ADVISOR_TOOLS = [
 
   listTool(
     "proponer_categorias",
-    "Propone categorías de ingresos o egresos a crear.",
+    "Propone categorías y subcategorías de ingresos o egresos a crear. Un grupo y sus subcategorías van en la misma llamada.",
     "categorias",
     {
-      name: { type: "string", description: "Nombre corto, máx. 100 caracteres." },
-      type: { type: "string", enum: ["ingreso", "egreso"] },
+      name: { type: "string", description: "Nombre corto, máx. 100 caracteres (de la subcategoría, sin el grupo)." },
+      type: { type: "string", enum: ["ingreso", "egreso"], description: "En una subcategoría, el mismo de su grupo." },
+      grupo: nullable(
+        "string",
+        'Para crearla como subcategoría: id de una categoría principal del catálogo, o "nueva:<Nombre>" de una principal que propones en esta misma llamada. null = categoría principal.',
+      ),
       description: nullable("string", "Qué incluye, según el usuario."),
       color: { type: "string", description: "Color #RRGGBB distinto para cada categoría." },
       budgetLimit: nullable("number", "Presupuesto mensual en COP si el usuario lo mencionó, o null."),
@@ -121,7 +131,7 @@ export const ADVISOR_TOOLS = [
   }),
   listTool(
     "proponer_transacciones",
-    "Propone registrar ingresos, gastos o transferencias entre cuentas del usuario que te contó o que salen de una evidencia que adjuntó (recibo, factura, comprobante). Un pago a otra persona es un egreso; transferencia es solo mover plata entre dos cuentas suyas (p. ej. de Ahorros a Nequi). Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación.",
+    "Propone registrar ingresos, gastos o transferencias entre cuentas del usuario que te contó o que salen de una evidencia que adjuntó (recibo, factura, comprobante). Un pago a otra persona es un egreso; transferencia es solo mover plata entre dos cuentas suyas (p. ej. de Ahorros a Nequi). Si te pasó una lista o tabla, incluye TODAS sus filas en esta misma llamada (hasta 100); la tarjeta es la única confirmación. Si falta la cuenta o la categoría, propónla en esta misma respuesta y úsala con \"nueva:<Nombre>\": la app arma una sola tarjeta y crea todo en orden.",
     "transacciones",
     {
       date: { type: "string", description: "Fecha YYYY-MM-DD." },
@@ -129,12 +139,12 @@ export const ADVISOR_TOOLS = [
       amount: { type: "number", description: "Monto positivo en COP." },
       categoryId: nullable(
         "string",
-        "id de una categoría del catálogo cuyo tipo coincida con type. En transferencia puede ser null.",
+        `id de una categoría del catálogo cuyo tipo coincida con type. En transferencia puede ser null.${NEW_CATEGORY}`,
       ),
-      accountId: ids("id de una cuenta del catálogo (en transferencia, la de origen)."),
+      accountId: ids(`id de una cuenta del catálogo (en transferencia, la de origen).${NEW_ACCOUNT}`),
       toAccountId: nullable(
         "string",
-        "Solo transferencia: id de la cuenta destino del catálogo, distinta de accountId. null en ingresos y gastos.",
+        `Solo transferencia: id de la cuenta destino del catálogo, distinta de accountId. null en ingresos y gastos.${NEW_ACCOUNT}`,
       ),
       description: nullable("string", "Descripción corta, o null."),
       evidencia: nullable(
@@ -148,7 +158,7 @@ export const ADVISOR_TOOLS = [
     "Propone crear o ajustar presupuestos mensuales por categoría (si ya existe para ese mes, se actualiza).",
     "presupuestos",
     {
-      categoryId: ids("id de una categoría de egreso del catálogo."),
+      categoryId: ids(`id de una categoría de egreso del catálogo.${NEW_CATEGORY}`),
       amount: { type: "number", description: "Monto mensual en COP." },
       year: { type: "integer", description: "Año." },
       month: { type: "integer", description: "Mes 1-12." },
@@ -159,7 +169,7 @@ export const ADVISOR_TOOLS = [
     payee: { type: "string", description: "A quién se le debe." },
     totalAmount: { type: "number", description: "Monto total en COP." },
     dueDate: { type: "string", description: "Fecha límite YYYY-MM-DD." },
-    accountId: ids("id de la cuenta con la que se paga."),
+    accountId: ids(`id de la cuenta con la que se paga.${NEW_ACCOUNT}`),
     notes: nullable("string", "Notas, o null."),
     isRecurring: { type: "boolean", description: "true si se paga en cuotas periódicas." },
     recurrenceType: { type: ["string", "null"], enum: ["monthly", "biweekly", null] },
@@ -172,8 +182,8 @@ export const ADVISOR_TOOLS = [
     {
       debtId: ids("id de una deuda pendiente."),
       amount: { type: "number", description: "Monto del abono en COP." },
-      accountId: ids("id de la cuenta desde la que se pagó."),
-      categoryId: ids("id de una categoría de egreso para el pago."),
+      accountId: ids(`id de la cuenta desde la que se pagó.${NEW_ACCOUNT}`),
+      categoryId: ids(`id de una categoría de egreso para el pago.${NEW_CATEGORY}`),
       paidAt: nullable("string", "Fecha YYYY-MM-DD, o null para hoy."),
       description: nullable("string", "Descripción, o null."),
     },
@@ -185,7 +195,7 @@ export const ADVISOR_TOOLS = [
     {
       name: { type: "string", description: "Nombre, ej. 'Arriendo'." },
       payeeName: { type: "string", description: "A quién se le paga." },
-      fromAccountId: ids("id de la cuenta desde la que se paga."),
+      fromAccountId: ids(`id de la cuenta desde la que se paga.${NEW_ACCOUNT}`),
       initialAmount: nullable("number", "Monto habitual en COP, o null."),
       recurrenceType: {
         type: "string",

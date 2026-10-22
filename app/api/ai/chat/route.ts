@@ -4,6 +4,7 @@ import { assertAiQuota, recordAiUsage } from "@/lib/ai/quota";
 import { AdvisorData, loadSnapshot, type AdvisorSnapshot } from "@/lib/ai/advisor/snapshot";
 import {
   analyzePendingEvidence,
+  defersCreation,
   asksPermissionToRegister,
   isPaymentEvidence,
   readMessages,
@@ -22,7 +23,7 @@ import {
   type ReadToolName,
 } from "@/lib/ai/advisor/tools";
 import { describeReadStep, runReadTool } from "@/lib/ai/advisor/read-tools";
-import { checkProposal, mergeChecks, type ProposalCheck } from "@/lib/ai/advisor/proposals";
+import { checkProposal, mergeChecks, onlyExisting, withProposed, type ProposalCheck } from "@/lib/ai/advisor/proposals";
 import { sanitizeChart } from "@/lib/ai/advisor/charts";
 import { sanitizeBlock } from "@/lib/ai/advisor/blocks";
 import { addUsage, emptyUsage, type OpenAIUsage } from "@/lib/ai/pricing";
@@ -83,9 +84,16 @@ function parseArgs(call: ToolCall): Record<string, unknown> | null {
 const PROPOSE_WITH_EVIDENCE =
   "(Instrucción de la app) El usuario ya adjuntó el soporte para registrar el movimiento. No le pidas permiso ni confirmación por texto: llama ahora a proponer_transacciones con evidencia = el id del archivo; la tarjeta es la confirmación. Solo si de verdad falta un dato que no puedes deducir, o el monto que dijo no coincide con el de la evidencia, responde con esa única pregunta.";
 
+/** Igual, durante la configuración guiada: lo que el usuario contó se propone de una vez. */
+const PROPOSE_NOW =
+  "(Instrucción de la app) No le pidas permiso ni confirmación por texto: la tarjeta de propuesta es la confirmación y ahí puede desmarcar lo que no quiera. Llama ahora a las proponer_* con lo que ya te contó (puedes combinar varias en esta respuesta). Solo si de verdad falta un dato que no puedes deducir, responde con esa única pregunta.";
+
 const TRUNCATED_ARGS = [
   "Los argumentos llegaron incompletos: la lista era demasiado larga para una sola llamada. Divídela en varias llamadas de máximo 50 ítems en esta misma respuesta; la app las une en una sola tarjeta.",
 ];
+
+const ON_HOLD =
+  "En pausa: otra propuesta de esta misma respuesta tiene problemas. Corrígela y vuelve a llamar TODAS las proponer_* juntas; la app las une en una sola tarjeta.";
 
 const cleanList = (value: unknown, maxItems: number, maxLength: number): string[] =>
   Array.isArray(value)
@@ -177,10 +185,14 @@ async function runAdvisor(
     const calls = (message?.tool_calls ?? []).filter((c) => c.type === "function" && c.function?.name);
     if (calls.length === 0) {
       const reply = parseReply(message?.content);
-      if (expectProposal && !nudged && !lastRound && asksPermissionToRegister(reply.messages.map((m) => m.text))) {
+      const texts = reply.messages.flatMap((m) => [m.text, m.block?.type === "options" ? (m.block.question ?? "") : ""]);
+      const asksPermission = expectProposal
+        ? asksPermissionToRegister(texts)
+        : snapshot.setupPending && defersCreation(texts);
+      if (asksPermission && !nudged && !lastRound) {
         nudged = true;
         conversation.push({ role: "assistant", content: message?.content ?? "" });
-        conversation.push({ role: "system", content: PROPOSE_WITH_EVIDENCE });
+        conversation.push({ role: "system", content: expectProposal ? PROPOSE_WITH_EVIDENCE : PROPOSE_NOW });
         continue;
       }
       return reply;
@@ -188,44 +200,74 @@ async function runAdvisor(
 
     conversation.push({ role: "assistant", content: message?.content ?? null, tool_calls: calls });
 
-    let accepted: ProposalCheck | null = null;
+    const results = new Map<string, unknown>();
+    const proposalCalls: { call: ToolCall; name: ProposalToolName; args: Record<string, unknown> | null }[] = [];
     for (const call of calls) {
       const name = call.function?.name ?? "";
       const args = parseArgs(call);
-      let result: unknown;
 
       if (isReadTool(name)) {
         emit({ type: "step", step: { label: describeReadStep(name, args ?? {}, snapshot.catalog) } });
         try {
-          result = await runReadTool(name, args ?? {}, data, snapshot.catalog);
+          results.set(call.id, await runReadTool(name, args ?? {}, data, snapshot.catalog));
         } catch (error) {
-          result = { error: error instanceof Error ? error.message : "No se pudo consultar." };
+          results.set(call.id, { error: error instanceof Error ? error.message : "No se pudo consultar." });
         }
       } else if (isProposalTool(name)) {
-        emit({ type: "step", step: { label: "Preparando una propuesta para ti" } });
-        const check = args
-          ? checkProposal(name, args, snapshot.catalog, await data.getBudgets().catch(() => []), userText, evidence)
-          : { proposal: null, problems: TRUNCATED_ARGS };
-        // Varias llamadas del mismo tipo en una respuesta se unen en una sola tarjeta.
-        const merged: ProposalCheck | null = check.proposal && accepted ? mergeChecks(accepted, check) : check.proposal ? check : null;
-        if (merged) accepted = merged;
-        result = !check.proposal
-          ? { ok: false, problemas: check.problems.length ? check.problems : ["La lista quedó vacía."] }
-          : merged
-            ? { ok: true, descartados: check.problems }
-            : { ok: false, problemas: ["Propón un solo tipo de acción por respuesta."] };
+        proposalCalls.push({ call, name, args });
       } else {
-        result = { error: "Herramienta no disponible en este turno." };
+        results.set(call.id, { error: "Herramienta no disponible en este turno." });
       }
+    }
 
+    // Todas las propuestas de la respuesta van en una sola tarjeta. Primero las
+    // categorías y cuentas: lo que crean ("nueva:Nequi") lo pueden usar las demás.
+    let accepted: ProposalCheck | null = null;
+    const rejected: string[] = [];
+    /** Lo que se descartó de cada llamada aceptada: el modelo lo ve si hay que reintentar. */
+    const discarded = new Map<string, string[]>();
+    if (proposalCalls.length) {
+      emit({ type: "step", step: { label: "Preparando una propuesta para ti" } });
+      proposalCalls.sort((a, b) => PROPOSAL_TOOL_NAMES.indexOf(a.name) - PROPOSAL_TOOL_NAMES.indexOf(b.name));
+      const budgets = await data.getBudgets().catch(() => []);
+      let catalog = snapshot.catalog;
+      for (const { call, name, args } of proposalCalls) {
+        const check = args
+          ? checkProposal(name, args, catalog, budgets, userText, evidence)
+          : { proposal: null, problems: TRUNCATED_ARGS };
+        if (check.proposal) {
+          accepted = accepted ? mergeChecks(accepted, check) : check;
+          catalog = withProposed(catalog, check.proposal);
+          discarded.set(call.id, check.problems);
+          results.set(call.id, { ok: true, descartados: check.problems });
+        } else if (onlyExisting(check)) {
+          results.set(call.id, { ok: true, nota: "Ya existía; se usa la que hay." });
+        } else {
+          rejected.push(call.id);
+          results.set(call.id, { ok: false, problemas: check.problems.length ? check.problems : ["La lista quedó vacía."] });
+        }
+      }
+    }
+
+    // Si una parte falló y queda ronda para corregir, no sale una tarjeta a medias.
+    const retry = rejected.length > 0 && round < MAX_ROUNDS - 2;
+    if (retry) {
+      for (const { call } of proposalCalls) {
+        if (!rejected.includes(call.id)) {
+          results.set(call.id, { ok: false, problemas: [ON_HOLD, ...(discarded.get(call.id) ?? [])] });
+        }
+      }
+    }
+
+    for (const call of calls) {
       conversation.push({
         role: "tool",
         tool_call_id: call.id,
-        content: JSON.stringify(result).slice(0, MAX_TOOL_RESULT_CHARS),
+        content: JSON.stringify(results.get(call.id)).slice(0, MAX_TOOL_RESULT_CHARS),
       });
     }
 
-    if (accepted?.proposal) {
+    if (accepted?.proposal && !retry) {
       return {
         type: "reply",
         messages: [{ text: accepted.message ?? "Te preparé una propuesta. Revísala y confirma lo que quieras." }],
